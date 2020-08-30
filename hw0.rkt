@@ -20,6 +20,8 @@
 ; plural
 (define (plural [s : String]) : String
   ; check if the string is empty
+  ; if yes, then return a string with just s
+  ; if no, check the last character and add either s or ies to the end
   (cond
     [(equal? s "")
      (string-append s "s")]
@@ -42,9 +44,19 @@
   (type-case Light l
     [(bulb w t) (/ (* w 24) 1000)]
     [(candle i) 0.0]))
-                      
 
 ; use-for-one-hour
+; this method assumes users enter a height >= 0.0
+(define (use-for-one-hour [l : Light]) : Light
+  (type-case Light l
+    [(bulb w t) l]
+    [(candle i)
+     (cond
+       [(eq? i 0.0) (candle 0.0)]
+       [else
+        (local [(define new-height (sub1 i))]
+          (candle new-height))])]))
+          
 
 ; 3rd Power Tests
 (test (3rd-power 17) 4913)
@@ -70,5 +82,11 @@
 (test (energy-usage (bulb 100.0 'halogen)) 2.4)
 (test (energy-usage (candle 10.0)) 0.0)
 (test (energy-usage (bulb 50.0 'krypton)) 1.2)
-(test (energy-usage (bulb 200.0 'krypton)) 4.8)
+(test (energy-usage (bulb 200.0 'neon)) 4.8)
+(test (energy-usage (candle 150.0)) 0.0)
 
+; use-for-one-hour Tests
+(test (use-for-one-hour (bulb 100.0 'halogen)) (bulb 100.0 'halogen))
+(test (use-for-one-hour (candle 10.0)) (candle 9.0))
+(test (use-for-one-hour (candle 0.0)) (candle 0.0))
+(test (use-for-one-hour (bulb 300.0 'neon)) (bulb 300.0 'neon))
