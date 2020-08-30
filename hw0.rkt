@@ -2,7 +2,7 @@
 
 ; name: Pranav Rajan
 ; uID: u1136324
-; date: 08/27/2020
+; date: 08/30/2020
 
 ; 3rd Power
 (define (3rd-power [base : Number]) : Number
@@ -14,20 +14,36 @@
   ; using 3rd-power function
   (local [(define 6-power (* (3rd-power base) (3rd-power base)))]
     (* (* (* (* 6-power 6-power) (* 6-power 6-power))
-       (* 6-power 6-power))
+          (* 6-power 6-power))
        6-power)))
 
 ; plural
-(define (plural [input : String]) : String
-  ; find the index of the last character
-  (local[(define end (sub1 (string-length input)))]
-    (if eq ? (string-ref input end) #\y)
-        (string-append (substring input 0 end) "ies")
-        (string-append (substring input 0 end) "s"))))
-        
-        
-  
+(define (plural [s : String]) : String
+  ; check if the string is empty
+  (cond
+    [(equal? s "")
+     (string-append s "s")]
+    [else
+     ; get the index of the last character
+     (local [(define last-char-index (sub1 (string-length s)))]
+       (cond
+         [(eq? (string-ref s last-char-index) #\y)
+          (string-append (substring s 0 last-char-index) "ies")]
+         [else (string-append s "s")]))]))
+
+; Light definition from Professor Flatt
+(define-type Light
+  (bulb [watts : Number]
+        [technology : Symbol])
+  (candle [inches : Number]))
+
 ; energy-use
+(define (energy-usage [l : Light]) : Number
+  (type-case Light l
+    [(bulb w t) (/ (* w 24) 1000)]
+    [(candle i) 0.0]))
+                      
+
 ; use-for-one-hour
 
 ; 3rd Power Tests
@@ -42,5 +58,17 @@
 (test (42nd-power 2) 4398046511104)
 (test (42nd-power 3) 109418989131512359209)
 
-; plural test
-(plural "fish")
+; plural Tests
+(test (plural "baby") "babies")
+(test (plural "fish") "fishs")
+(test (plural "") "s")
+(test (plural "programming") "programmings")
+(test (plural "racket") "rackets")
+(test (plural "py") "pies")
+
+; energy-usage Tests
+(test (energy-usage (bulb 100.0 'halogen)) 2.4)
+(test (energy-usage (candle 10.0)) 0.0)
+(test (energy-usage (bulb 50.0 'krypton)) 1.2)
+(test (energy-usage (bulb 200.0 'krypton)) 4.8)
+
