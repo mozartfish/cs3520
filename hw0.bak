@@ -85,7 +85,7 @@
     [(bulb w t) l]
     [(candle i)
      (cond
-       [(< i 1.0) (candle 0.0)]
+       [(eq? i 0.0) (candle 0.0)]
        [else
         (local [(define new-height (sub1 i))]
           (candle new-height))])]))
@@ -95,5 +95,4 @@
 (test (use-for-one-hour (candle 10.0)) (candle 9.0))
 (test (use-for-one-hour (candle 1.0)) (candle 0.0))
 (test (use-for-one-hour (candle 0.0)) (candle 0.0))
-(test (use-for-one-hour (candle 0.9)) (candle 0.0))
 (test (use-for-one-hour (bulb 300.0 'neon)) (bulb 300.0 'neon))
