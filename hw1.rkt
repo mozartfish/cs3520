@@ -73,7 +73,8 @@
 
 ; Examples
 (module+ test
-  (test (contains? (node 5 (leaf 6) (leaf 7)) 6) #t))
+  (test (contains? (node 5 (leaf 6) (leaf 7)) 6) #t)
+  (test (contains? (node 5 (leaf 6) (leaf 7)) 0) #f))
 
 ; Template
 ; the number n is a case of the along for the ride argument pattern
@@ -128,9 +129,9 @@
 
 ; Template
 #;(define (big-leaves? [t : Tree]) : Boolean
-  (type-case Tree t
-    [(leaf v)...(bigger-leaves?...v...0)]
-    [(node v l r)...(bigger-leaves?...l...0)...(bigger-leaves?...r....0)]))
+    (type-case Tree t
+      [(leaf v)...(bigger-leaves?...v...0)]
+      [(node v l r)...(bigger-leaves?...l...0)...(bigger-leaves?...r....0)]))
 
 ;Body
 (define (big-leaves? [t : Tree]) : Boolean
@@ -145,7 +146,7 @@
 ; postive-trees : ((listof Trees) -> Boolean)
 
 ; Examples
-#;(module+ test
+(module+ test
   (test (positive-trees? (cons (leaf 6)
                                empty))
         #t)
@@ -171,14 +172,15 @@
 
 ; Template
 #;(define (positive-trees? [trees : Listof Trees]) : Boolean
-  (type-case (Listof Trees) t
-    [(empty)...]
-    [(cons n rst-t)...]))
+    (type-case (Listof Trees) t
+      [(empty)...]
+      [(cons n rst-t)...]))
 
 ; Body
 (define (positive-trees? [trees : (Listof Tree)]) : Boolean
   (type-case (Listof Tree) trees
     [empty #t]
     [(cons n rst-trees)
-     (cons (> (sum n) 0)
-           (positive-trees? rst-trees))]))
+     (if (< (sum n) 0)
+         #f
+         (positive-trees? rst-trees))]))
