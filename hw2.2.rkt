@@ -2,25 +2,39 @@
 
 ; name: Pranav Rajan
 ; uID: u1136324
-; date: 09/12/2020
-
-; print only the error messages
+; date: 09/15/2020
 
 (define-type Exp
+  ; numbers
   (numE [n : Number])
+  ; identifiers / variable references
   (idE [s : Symbol])
+  ; addition
   (plusE [l : Exp] 
          [r : Exp])
+  ; multiplication
   (multE [l : Exp]
          [r : Exp])
+  ; define max type
+  (maxE [l : Exp]
+        [r : Exp])
+  
+  ; function calls
+  ; s - function name
+  ; arg - argument expression
   (appE [s : Symbol]
-        [arg : Exp]))
+        [arg : (Listof Exp)]))
 
+; definition of a function
+; name
+; arguments
+; function body
 (define-type Func-Defn
   (fd [name : Symbol] 
-      [arg : Symbol] 
+      [arg : (Listof Symbol)] 
       [body : Exp]))
 
+; this module only prints the error messages
 (module+ test
   (print-only-errors #t))
 
@@ -29,6 +43,7 @@
 ;; - `SYMBOL
 ;; - `{+ EXP EXP}
 ;; - `{* EXP EXP}
+;; - `{max EXP EXP}
 ;; - `{SYMBOL EXP)
 
 ;; A FUNC-DEFN is
@@ -39,22 +54,30 @@
   (cond
     [(s-exp-match? `NUMBER s) (numE (s-exp->number s))]
     [(s-exp-match? `SYMBOL s) (idE (s-exp->symbol s))]
+    ; addition expression
     [(s-exp-match? `{+ ANY ANY} s)
      (plusE (parse (second (s-exp->list s)))
             (parse (third (s-exp->list s))))]
+    ; multiplication expression
     [(s-exp-match? `{* ANY ANY} s)
      (multE (parse (second (s-exp->list s)))
             (parse (third (s-exp->list s))))]
-    [(s-exp-match? `{SYMBOL ANY} s)
+    ; max expression
+    [(s-exp-match? `{max ANY ANY}s)
+     (maxE (parse (second (s-exp->list s)))
+           (parse (third (s-exp->list s))))]
+    ; function calls
+    [(s-exp-match? `{SYMBOL ANY ...} s)
      (appE (s-exp->symbol (first (s-exp->list s)))
-           (parse (second (s-exp->list s))))]
+           (map parse (rest (s-exp->list s))))]
     [else (error 'parse "invalid input")]))
 
+; parse function definitions
 (define (parse-fundef [s : S-Exp]) : Func-Defn
   (cond
-    [(s-exp-match? `{define {SYMBOL SYMBOL} ANY} s)
+    [(s-exp-match? `{define {SYMBOL SYMBOL ...} ANY} s)
      (fd (s-exp->symbol (first (s-exp->list (second (s-exp->list s)))))
-         (s-exp->symbol (second (s-exp->list (second (s-exp->list s)))))
+         (map s-exp->symbol (rest (s-exp->list (second (s-exp->list s)))))
          (parse (third (s-exp->list s))))]
     [else (error 'parse-fundef "invalid input")]))
 
@@ -71,12 +94,12 @@
         (plusE (multE (numE 3) (numE 4))
                (numE 8)))
   (test (parse `{double 9})
-        (appE 'double (numE 9)))
+        (appE 'double (list(numE 9))))
   (test/exn (parse `{{+ 1 2}})
             "invalid input")
 
   (test (parse-fundef `{define {double x} {+ x x}})
-        (fd 'double 'x (plusE (idE 'x) (idE 'x))))
+        (fd 'double (list 'x) (plusE (idE 'x) (idE 'x))))
   (test/exn (parse-fundef `{def {f x} x})
             "invalid input")
 
@@ -92,11 +115,12 @@
     [(idE s) (error 'interp "free variable")]
     [(plusE l r) (+ (interp l defs) (interp r defs))]
     [(multE l r) (* (interp l defs) (interp r defs))]
-    [(appE s arg) (local [(define fd (get-fundef s defs))]
-                    (interp (subst (numE (interp arg defs))
-                                   (fd-arg fd)
-                                   (fd-body fd))
-                            defs))]))
+    [(maxE l r)  (max (interp l defs) (interp r defs))]
+    [(appE s args) (local [(define fd (get-fundef s defs))]
+                     (if (not (equal? (length args) (length (fd-arg fd))))
+                         (error 'interp "wrong arity")
+                         (interp (subst-all (interp-arg-list args defs) (fd-arg fd) (fd-body fd))
+                                  defs)))]))
 
 (module+ test
   (test (interp (parse `2) empty)
@@ -116,7 +140,25 @@
         16)
   (test (interp (parse `{quadruple 8})
                 (list double-def quadruple-def))
-        32))
+        32)
+  (test (interp (parse `{max 1 2})
+                (list))
+        2)
+  (test (interp (parse `{max {+ 4 5} {+ 2 3}})
+                (list))
+        9))
+
+; function for interpreting a list of arguments
+; recipe
+; template
+ (define (interp-arg-list [a : (Listof Exp)] [defs : (Listof Func-Defn)]) : (Listof Exp)
+   (type-case (Listof Exp) a
+     [empty empty]
+     [(cons first rst)
+      (cons (numE(interp first defs)) (interp-arg-list rst defs))]))
+      
+    
+
 
 ;; get-fundef ----------------------------------------
 (define (get-fundef [s : Symbol] [defs : (Listof Func-Defn)]) : Func-Defn
@@ -149,8 +191,21 @@
                         (subst what for r))]
     [(multE l r) (multE (subst what for l)
                         (subst what for r))]
-    [(appE s arg) (appE s (subst what for arg))]))
+    [(maxE l r) (maxE (subst what for l)
+                      (subst what for r))]
+    [(appE s args) (appE s (subst-in-list what for args))]))
 
+; function for interpreting a function calls in subst
+; recipe
+; representation -> [what : Exp] [for : Symbol] (Listof in)
+; Examples
+ ; template
+  (define (subst-in-list [what : Exp] [for : Symbol] [in : (Listof Exp)]) : (Listof Exp)
+    (type-case (Listof Exp) in
+      [empty in]
+      [(cons first-in rst-in)
+       (cons (subst what for first-in) (subst-in-list what for rst-in))]))
+                                           
 (module+ test
   (test (subst (parse `8) 'x (parse `9))
         (numE 9))
@@ -163,4 +218,47 @@
   (test (subst (parse `8) 'x (parse `{* y x}))
         (parse `{* y 8}))
   (test (subst (parse `8) 'x (parse `{double x}))
-        (parse `{double 8})))
+        (parse `{double 8}))
+  (test (subst (parse `3) 'x (parse `{max x y}))
+        (parse `{max 3 y})))
+
+
+
+;; subst-all--------------------------------
+; Representation
+; subst-all : (Listof Exp) what (Listof Symbols) for (in Exp) -> Expression
+; Examples
+(module+ test
+  (test (subst-all (list (parse `8)) (list 'x) (parse`9))
+        (numE 9))
+  (test (subst-all (list (parse `8)) (list 'x) (parse`x))
+        (numE 8))
+  (test (subst-all (list (parse `8)) (list'x) (parse `y))
+        (idE 'y))
+(test (subst-all (list (parse `8)) (list 'x) (parse `{+ x y}))
+        (parse `{+ 8 y})))
+  
+  
+; Template/Body
+(define(subst-all [what : (Listof Exp)] [for : (Listof Symbol)] [in : Exp]) : Exp
+  (type-case (Listof Exp) what
+    [empty in]
+    [(cons first-what what-rst)
+     (subst-all what-rst (rest for) (subst first-what (first for) in))]))
+
+      
+
+; assignment tests
+(module+ test
+  (test (interp (parse `{f 1 2})
+                (list (parse-fundef `{define {f x y} {+ x y}})))
+        3)
+  (test (interp (parse `{+ {f} {f}})
+                (list (parse-fundef `{define {f} 5})))
+        10)
+  (test (interp (parse `{f 2 3})
+                (list (parse-fundef `{define {f x y} {+ y {+ x x}}})))
+        7)
+  (test/exn (interp (parse `{f 1})
+                    (list (parse-fundef `{define {f x y} {+ x y}})))
+            "wrong arity"))
