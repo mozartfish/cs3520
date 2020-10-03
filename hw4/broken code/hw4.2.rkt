@@ -2,7 +2,7 @@
 
 ; name : Pranav Rajan
 ; uID: u1136324
-; date: 09/30/2020
+; date: 10/01/2020 (a crazy week)
 
 (define-type-alias Location Number)
 (define-type Value
@@ -30,8 +30,7 @@
   (unboxE [arg : Exp])
   (setboxE [bx : Exp]
            [val : Exp])
-  (beginE [l : Exp]
-          [r : Exp]))
+  (beginE [exps : (Listof Exp)]))
 
 (define-type Binding
   (bind [name : Symbol]
@@ -85,9 +84,8 @@
     [(s-exp-match? `{set-box! ANY ANY} s)
      (setboxE (parse (second (s-exp->list s)))
               (parse (third (s-exp->list s))))]
-    [(s-exp-match? `{begin ANY ANY} s)
-     (beginE (parse (second (s-exp->list s)))
-             (parse (third (s-exp->list s))))]
+    [(s-exp-match? `{begin ANY ANY ...} s)
+     (beginE (map parse (rest (s-exp->list s))))]
     [(s-exp-match? `{ANY ANY} s)
      (appE (parse (first (s-exp->list s)))
            (parse (second (s-exp->list s))))]
@@ -119,8 +117,19 @@
         (unboxE (idE 'b)))
   (test (parse `{set-box! b 0})
         (setboxE (idE 'b) (numE 0)))
+  
+  ; new beginE tests
+  
+  ; two arguments
   (test (parse `{begin 1 2})
-        (beginE (numE 1) (numE 2)))
+        (beginE (list (numE 1) (numE 2))))
+  ; one argument
+  (test (parse `{begin 1})
+        (beginE (list (numE 1))))
+  ; zero argument - exception case 
+  (test/exn (parse `{begin})
+            "invalid input")
+  
   (test/exn (parse `{{+ 1 2}})
             "invalid input"))
 
@@ -185,9 +194,13 @@
                          (replace-val sto-v
                                       (cell l v-v)))]
                    [else (error 'interp "not a box")])))]
-    [(beginE l r)
-     (with [(v-l sto-l) (interp l env sto)]
-           (interp r env sto-l))]))
+    [(beginE exps)
+     (cond
+       [(empty? (rest exps))
+        (interp (first exps) env sto)]
+       [else
+        (with [(v-l sto-l) (interp (first exps) env sto)]
+              (interp (beginE (rest exps)) env sto-l))])]))
 
 (module+ test
   (test (interp (parse `2) mt-env mt-store)
@@ -409,5 +422,17 @@
      (if (= (cell-location fstSto) (cell-location sto))
          (cons sto sto-rst)
          (cons fstSto (replace-val sto-rst sto)))]))
-    
 
+; Sequences Test
+(module+ test 
+  (test (interp (parse `{let {[b {box 1}]}
+                          {begin
+                            {set-box! b {+ 2 {unbox b}}}
+                            {set-box! b {+ 3 {unbox b}}}
+                            {set-box! b {+ 4 {unbox b}}}
+                            {unbox b}}})
+                mt-env
+                mt-store)
+        (v*s (numV 10)
+             (override-store (cell 1 (numV 10))
+                             mt-store))))

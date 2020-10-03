@@ -1,13 +1,19 @@
 #lang plait
 
-(define-type-alias Location Number)
+; name : Pranav Rajan
+; uID: u1136324
+; date: 10/01/2020 (a crazy week)
 
+(define-type-alias Location Number)
 (define-type Value
   (numV [n : Number])
   (closV [arg : Symbol]
          [body : Exp]
          [env : Env])
-  (boxV [l : Location]))
+  (boxV [l : Location])
+  (recV [ns : (Listof Symbol)]
+          [vs : (Listof Value)])
+  )
 
 (define-type Exp
   (numE [n : Number])
@@ -27,8 +33,12 @@
   (unboxE [arg : Exp])
   (setboxE [bx : Exp]
            [val : Exp])
-  (beginE [l : Exp]
-          [r : Exp]))
+  (beginE [exps : (Listof Exp)])
+  (recordE [ns : (Listof Symbol)]
+           [args : (Listof Exp)])
+  (getE [rec : Exp]
+        [n : Symbol])
+  )
 
 (define-type Binding
   (bind [name : Symbol]
@@ -82,9 +92,15 @@
     [(s-exp-match? `{set-box! ANY ANY} s)
      (setboxE (parse (second (s-exp->list s)))
               (parse (third (s-exp->list s))))]
-    [(s-exp-match? `{begin ANY ANY} s)
-     (beginE (parse (second (s-exp->list s)))
-             (parse (third (s-exp->list s))))]
+    [(s-exp-match? `{begin ANY ANY ...} s)
+     (beginE (map parse (rest (s-exp->list s))))]
+    [(s-exp-match? `{record {SYMBOL ANY} ...} s)
+     (recordE (map (lambda (l) (s-exp->symbol (first (s-exp->list l))))
+                   (rest (s-exp->list s)))
+              (map (lambda (l) (parse (second (s-exp->list l))))
+                   (rest (s-exp->list s))))]
+    [(s-exp-match? `{get ANY SYMBOL} s)
+     (getE (parse (second (s-exp->list s)))
     [(s-exp-match? `{ANY ANY} s)
      (appE (parse (first (s-exp->list s)))
            (parse (second (s-exp->list s))))]
@@ -116,15 +132,26 @@
         (unboxE (idE 'b)))
   (test (parse `{set-box! b 0})
         (setboxE (idE 'b) (numE 0)))
+  
+  ; new beginE tests
+  
+  ; two arguments
   (test (parse `{begin 1 2})
-        (beginE (numE 1) (numE 2)))
+        (beginE (list (numE 1) (numE 2))))
+  ; one argument
+  (test (parse `{begin 1})
+        (beginE (list (numE 1))))
+  ; zero argument - exception case 
+  (test/exn (parse `{begin})
+            "invalid input")
+  
   (test/exn (parse `{{+ 1 2}})
             "invalid input"))
 
 ;; with form ----------------------------------------
 (define-syntax-rule
   (with [(v-id sto-id) call]
-    body)
+        body)
   (type-case Result call
     [(v*s v-id sto-id) body]))
                                 
@@ -135,56 +162,60 @@
     [(idE s) (v*s (lookup s env) sto)]
     [(plusE l r)
      (with [(v-l sto-l) (interp l env sto)]
-       (with [(v-r sto-r) (interp r env sto-l)]
-         (v*s (num+ v-l v-r) sto-r)))]
+           (with [(v-r sto-r) (interp r env sto-l)]
+                 (v*s (num+ v-l v-r) sto-r)))]
     [(multE l r)
      (with [(v-l sto-l) (interp l env sto)]
-       (with [(v-r sto-r) (interp r env sto-l)]
-         (v*s (num* v-l v-r) sto-r)))]
+           (with [(v-r sto-r) (interp r env sto-l)]
+                 (v*s (num* v-l v-r) sto-r)))]
     [(letE n rhs body)
      (with [(v-rhs sto-rhs) (interp rhs env sto)]
-       (interp body
-               (extend-env
-                (bind n v-rhs)
-                env)
-               sto-rhs))]
+           (interp body
+                   (extend-env
+                    (bind n v-rhs)
+                    env)
+                   sto-rhs))]
     [(lamE n body)
      (v*s (closV n body env) sto)]
     [(appE fun arg)
      (with [(v-f sto-f) (interp fun env sto)]
-       (with [(v-a sto-a) (interp arg env sto-f)]
-         (type-case Value v-f
-           [(closV n body c-env)
-            (interp body
-                    (extend-env
-                     (bind n v-a)
-                     c-env)
-                    sto-a)]
-           [else (error 'interp "not a function")])))]
+           (with [(v-a sto-a) (interp arg env sto-f)]
+                 (type-case Value v-f
+                   [(closV n body c-env)
+                    (interp body
+                            (extend-env
+                             (bind n v-a)
+                             c-env)
+                            sto-a)]
+                   [else (error 'interp "not a function")])))]
     [(boxE a)
      (with [(v sto-v) (interp a env sto)]
-       (let ([l (new-loc sto-v)])
-         (v*s (boxV l) 
-              (override-store (cell l v) 
-                              sto-v))))]
+           (let ([l (new-loc sto-v)])
+             (v*s (boxV l) 
+                  (override-store (cell l v) 
+                                  sto-v))))]
     [(unboxE a)
      (with [(v sto-v) (interp a env sto)]
-       (type-case Value v
-         [(boxV l) (v*s (fetch l sto-v) 
-                        sto-v)]
-         [else (error 'interp "not a box")]))]
+           (type-case Value v
+             [(boxV l) (v*s (fetch l sto-v) 
+                            sto-v)]
+             [else (error 'interp "not a box")]))]
     [(setboxE bx val)
      (with [(v-b sto-b) (interp bx env sto)]
-       (with [(v-v sto-v) (interp val env sto-b)]
-         (type-case Value v-b
-           [(boxV l)
-            (v*s v-v
-                 (override-store (cell l v-v)
-                                 sto-v))]
-           [else (error 'interp "not a box")])))]
-    [(beginE l r)
-     (with [(v-l sto-l) (interp l env sto)]
-       (interp r env sto-l))]))
+           (with [(v-v sto-v) (interp val env sto-b)]
+                 (type-case Value v-b
+                   [(boxV l)
+                    (v*s v-v
+                         (replace-val sto-v
+                                      (cell l v-v)))]
+                   [else (error 'interp "not a box")])))]
+    [(beginE exps)
+     (cond
+       [(empty? (rest exps))
+        (interp (first exps) env sto)]
+       [else
+        (with [(v-l sto-l) (interp (first exps) env sto)]
+              (interp (beginE (rest exps)) env sto-l))])]))
 
 (module+ test
   (test (interp (parse `2) mt-env mt-store)
@@ -255,8 +286,8 @@
                 mt-store)
         (v*s (numV 6)
              (override-store (cell 1 (numV 6))
-                             (override-store (cell 1 (numV 5))
-                                             mt-store))))
+                          
+                                             mt-store)))
   (test (interp (parse `{begin 1 2})
                 mt-env
                 mt-store)
@@ -270,8 +301,7 @@
                 mt-store)
         (v*s (numV 6)
              (override-store (cell 1 (numV 6))
-                             (override-store (cell 1 (numV 5))
-                                             mt-store))))
+                             mt-store)))
 
   (test/exn (interp (parse `{1 2}) mt-env mt-store)
             "not a function")
@@ -291,10 +321,10 @@
 ;; num+ and num* ----------------------------------------
 (define (num-op [op : (Number Number -> Number)] [l : Value] [r : Value]) : Value
   (cond
-   [(and (numV? l) (numV? r))
-    (numV (op (numV-n l) (numV-n r)))]
-   [else
-    (error 'interp "not a number")]))
+    [(and (numV? l) (numV? r))
+     (numV (op (numV-n l) (numV-n r)))]
+    [else
+     (error 'interp "not a number")]))
 (define (num+ [l : Value] [r : Value]) : Value
   (num-op + l r))
 (define (num* [l : Value] [r : Value]) : Value
@@ -309,11 +339,11 @@
 ;; lookup ----------------------------------------
 (define (lookup [n : Symbol] [env : Env]) : Value
   (type-case (Listof Binding) env
-   [empty (error 'lookup "free variable")]
-   [(cons b rst-env) (cond
-                       [(symbol=? n (bind-name b))
-                        (bind-val b)]
-                       [else (lookup n rst-env)])]))
+    [empty (error 'lookup "free variable")]
+    [(cons b rst-env) (cond
+                        [(symbol=? n (bind-name b))
+                         (bind-val b)]
+                        [else (lookup n rst-env)])]))
 
 (module+ test
   (test/exn (lookup 'x mt-env)
@@ -336,16 +366,16 @@
 
 (define (max-address [sto : Store]) : Location
   (type-case (Listof Storage) sto
-   [empty 0]
-   [(cons c rst-sto) (max (cell-location c)
-                          (max-address rst-sto))]))
+    [empty 0]
+    [(cons c rst-sto) (max (cell-location c)
+                           (max-address rst-sto))]))
 
 (define (fetch [l : Location] [sto : Store]) : Value
   (type-case (Listof Storage) sto
-   [empty (error 'interp "unallocated location")]
-   [(cons c rst-sto) (if (equal? l (cell-location c))
-                         (cell-val c)
-                         (fetch l rst-sto))]))
+    [empty (error 'interp "unallocated location")]
+    [(cons c rst-sto) (if (equal? l (cell-location c))
+                          (cell-val c)
+                          (fetch l rst-sto))]))
 
 (module+ test
   (test (max-address mt-store)
@@ -367,3 +397,105 @@
         (numV 9))
   (test/exn (fetch 2 mt-store)
             "unallocated location"))
+
+;; Takes a name and two parallel lists, returning an item from the
+;; second list where the name matches the item from the first list.
+(define (find [n : Symbol] [ns : (Listof Symbol)] [vs : (Listof Value)])
+  : Value
+  (cond
+   [(empty? ns) (error 'interp "no such field")]
+   [else (if (symbol=? n (first ns))
+             (first vs)
+             (find n (rest ns) (rest vs)))]))
+
+
+
+
+
+
+
+
+
+; Improving Assignment Test
+(module+ test
+  (test (interp (parse `{let {[b {box 1}]}
+                          {begin
+                            {set-box! b 2}
+                            {unbox b}}})
+                mt-env
+                mt-store)
+        (v*s (numV 2)
+             (override-store (cell 1 (numV 2))
+                             mt-store))))
+; replace function
+; Store- list of storages
+; Storage - a single storage object that contains a cell and value
+
+; Examples
+(module+ test
+  (test (replace-val empty (cell 1 (numV 2)))
+        empty)
+  (test (replace-val (list (cell 1 (numV 3))
+                           (cell 1 (numV 4))
+                           (cell 2 (numV 8))
+                           (cell 10 (numV 14)))
+                     (cell 10 (numV 15)))
+        (list (cell 1 (numV 3))
+              (cell 1 (numV 4))
+              (cell 2 (numV 8))
+              (cell 10 (numV 15)))))
+                                 
+
+
+ ; function that updates the value of a storage object to the most recent update
+(define (replace-val [sto-list : Store] [sto : Storage])
+  (type-case (Listof Storage) sto-list
+    [empty empty]
+    [(cons fstSto sto-rst)
+     (if (= (cell-location fstSto) (cell-location sto))
+         (cons sto sto-rst)
+         (cons fstSto (replace-val sto-rst sto)))]))
+
+; function that handles interpreting expressions
+(define (interp-expr [e : Exp]) : S-Exp
+  (with [(v sto) (interp e mt-env mt-store)]
+        (type-case Value v
+          [(numV n) (number->s-exp n)]
+          [(closV arg body env) `function]
+          [(boxV l) `box]
+          [(recV ns vs) `record])))
+  
+
+; Sequences Test
+(module+ test 
+  (test (interp (parse `{let {[b {box 1}]}
+                          {begin
+                            {set-box! b {+ 2 {unbox b}}}
+                            {set-box! b {+ 3 {unbox b}}}
+                            {set-box! b {+ 4 {unbox b}}}
+                            {unbox b}}})
+                mt-env
+                mt-store)
+        (v*s (numV 10)
+             (override-store (cell 1 (numV 10))
+                             mt-store))))
+
+; Records Tests
+  (test (interp-expr (parse `{+ 1 4}))
+        `5)
+  (test (interp-expr (parse `{record {a 10} {b {+ 1 2}}}))
+        `record)
+  (test (interp-expr (parse `{get {record {a 10} {b {+ 1 0}}} b}))
+        `1)
+  (test/exn (interp-expr (parse `{get {record {a 10}} b}))
+            "no such field")
+  (test (interp-expr (parse `{get {record {r {record {z 0}}}} r}))
+        `record)
+  (test (interp-expr (parse `{get {get {record {r {record {z 0}}}} r} z}))
+        `0)
+  (test (interp-expr (parse `{let {[b {box 0}]}
+                               {let {[r {record {a {unbox b}}}]}
+                                 {begin
+                                   {set-box! b 1}
+                                   {get r a}}}}))
+        `0)
