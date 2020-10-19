@@ -5,8 +5,8 @@
   (closV [arg : Symbol]
          [body : Exp]
          [env : Env])
-  (pairV [e1 : Exp]
-         [e2 : Exp]
+  (pairV [e1 : Thunk]
+         [e2 : Thunk]
          [env : Env]))
 
 (define-type Thunk
@@ -115,14 +115,17 @@
 (define (interp [a : Exp] [env : Env]) : Value
   (type-case Exp a
     [(numE n) (numV n)]
-    [(pairE e1 e2) (pairV e1 e2 env)]
+    [(pairE e1 e2) (pairV
+                    (delay e1 env (box (none)))
+                    (delay e2 env (box (none)))
+                    env)]
     [(fstE e) (type-case Value (interp e env)
                 [(pairV e1 e2 p-env)
-                 (interp e1 p-env)]
+                 (force e1)]
                 [else (error 'interp "not a pair")])]
     [(sndE e) (type-case Value (interp e env)
                 [(pairV e1 e2 p-env)
-                 (interp e2 p-env)]
+                 (force e2)]
                 [else (error 'interp "not a pair")])]
                 
                             
@@ -256,7 +259,12 @@
   (test (num-zero? (numV 0))
         #t)
   (test (num-zero? (numV 1))
-        #f))
+        #f)
+  (test/exn (num-zero? (pairV (delay (numE 8) mt-env (box (none)))
+                              (delay (numE 10) mt-env (box (none)))
+                              mt-env))
+            "not a number"))
+  
 
 ;; lookup ----------------------------------------
 (define (lookup [n : Symbol] [env : Env]) : Thunk
@@ -268,8 +276,10 @@
                        [else (lookup n rst-env)])]))
 
 (module+ test
-  (test/exn (lookup 'x mt-env)
-            "free variable")
+  (test (num-zero? (numV 0))
+        #t)
+  (test (num-zero? (numV 1))
+        #f))
   (test (lookup 'x (extend-env (bind 'x (delay (numE 8) mt-env (box (none)))) mt-env))
         (delay (numE 8) mt-env (box (none))))
   (test (lookup 'x (extend-env
@@ -279,7 +289,7 @@
   (test (lookup 'y (extend-env
                     (bind 'x (delay (numE 9) mt-env (box (none))))
                     (extend-env (bind 'y (delay (numE 8) mt-env (box (none)))) mt-env)))
-        (delay (numE 8) mt-env (box (none)))))
+        (delay (numE 8) mt-env (box (none))))
 
 ;; interp-expr-------------------------------
 (define (interp-expr [e : Exp]) : S-Exp
@@ -318,6 +328,10 @@
         `1)
   (test (interp-expr (parse `{snd {pair 1 2}}))
         `2)
+  (test/exn (interp-expr (parse `{fst 10}))
+        "not a pair")
+  (test/exn (interp-expr (parse `{snd 13}))
+        "not a pair")
   (test (interp-expr (parse `{let {[p {pair 1 2}]}
                                {+ {fst p} {snd p}}}))
         `3)
@@ -396,3 +410,65 @@
                  ;; Call list-ref on infinite list:
                  {{list-ref 4} {nats-from 2}}}}}))
         `6))
+
+;; Timing--------------------------------------------------------------
+(module+ test
+    (test (interp-expr 
+         (parse 
+          `{let {[mkrec
+                  {lambda {body-proc}
+                    {let {[fX {lambda {fX}
+                                {body-proc {fX fX}}}]}
+                      {fX fX}}}]}
+             {let {[nats-to
+                    {mkrec
+                     {lambda {nats-to}
+                       {lambda {n}
+                         {if0 n
+                              {pair 0 0}
+                              {let {[l {nats-to {+ n -1}}]}
+                                {pair {+ {fst l} 1}
+                                      l}}}}}}]}
+               {let {[sum
+                      {mkrec
+                       {lambda {sum}
+                         {lambda {n}
+                           {lambda {l}
+                             {if0 n
+                                  0
+                                  {+ {fst l}
+                                     {{sum {+ n -1}} {snd l}}}}}}}}]}
+                 {{sum 10000} {nats-to 10000}}}}}))
+        `50005000)
+
+  (test (interp-expr 
+         (parse 
+          `{let {[mkrec
+                  {lambda {body-proc}
+                    {let {[fX {lambda {fX}
+                                {body-proc {fX fX}}}]}
+                      {fX fX}}}]}
+             {let {[nats-to
+                    {mkrec
+                     {lambda {nats-to}
+                       {lambda {n}
+                         {if0 n
+                              {pair 0 0}
+                              {let {[l {nats-to {+ n -1}}]}
+                                {pair l
+                                      {+ {snd l} 1}}}}}}}]}
+               {let {[sum
+                      {mkrec
+                       {lambda {sum}
+                         {lambda {n}
+                           {lambda {l}
+                             {if0 n
+                                  0
+                                  {+ {snd l}
+                                     {{sum {+ n -1}} {fst l}}}}}}}}]}
+                 {{sum 10000} {nats-to 10000}}}}}))
+        `50005000))
+
+ (test (interp-expr (parse `{lambda {x} x}))
+        `function)
+
