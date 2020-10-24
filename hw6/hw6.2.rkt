@@ -246,6 +246,8 @@
   (num-op + l r))
 (define (num* [l : Value] [r : Value]) : Value
   (num-op * l r))
+
+;; num-zero? ---------------------------------------
 (define (num-zero? [v : Value]) : Boolean
   (type-case Value v
     [(numV n) (zero? n)]
@@ -328,8 +330,11 @@
         `1)
   (test (interp-expr (parse `{snd {pair 1 2}}))
         `2)
+
+  ;; test first exception -----------------
   (test/exn (interp-expr (parse `{fst 10}))
         "not a pair")
+  ;; test second exception ----------------
   (test/exn (interp-expr (parse `{snd 13}))
         "not a pair")
   (test (interp-expr (parse `{let {[p {pair 1 2}]}
@@ -469,6 +474,7 @@
                  {{sum 10000} {nats-to 10000}}}}}))
         `50005000))
 
+;; Test for functions
  (test (interp-expr (parse `{lambda {x} x}))
         `function)
 
