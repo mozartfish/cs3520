@@ -135,14 +135,14 @@
        (appE (lamE (list (s-exp->symbol (first bs)))
                    (parse (third (s-exp->list s))))
              (list (parse (second bs)))))]
-    [(s-exp-match? `{lambda {SYMBOL ...} ANY} s)
+    [(s-exp-match? `{lambda {SYMBOL} ANY} s)
      (lamE (map s-exp->symbol (s-exp->list 
                                (second (s-exp->list s))))
            (parse (third (s-exp->list s))))]
     [(s-exp-match? `{let/cc SYMBOL ANY} s)
      (let/ccE (s-exp->symbol (second (s-exp->list s)))
               (parse (third (s-exp->list s))))]
-    [(s-exp-match? `{ANY ANY ...} s)
+    [(s-exp-match? `{ANY ANY} s)
      (appE (parse (first (s-exp->list s)))
            (map parse (rest (s-exp->list s))))]
     [else (error 'parse "invalid input")]))
