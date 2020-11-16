@@ -286,7 +286,7 @@
     [(equalE l r)
      (if (equal? (numT) (typecheck-nums l r tenv))
          (boolT)
-         (error 'typecheck "input type mismatch"))]
+         (type-error r "num"))]
     [(ifE tst thn els) (typecheck-cond tst thn els tenv)]
     [(plusE l r) (typecheck-nums l r tenv)]
     [(multE l r) (typecheck-nums l r tenv)]
@@ -411,11 +411,8 @@
                        mt-env)
             "no type")
 
-  (test/exn (typecheck (parse `{+ 1 {if true true 1}})
+    (test/exn (typecheck (parse `{+ 1 {if true true 1}})
                        mt-env)
             "input type mismatch")
-  (test/exn (typecheck (parse `{if 1 4 5})
-                       mt-env)
-            "typecheck: no type: (numE 1) not bool")
   )
   

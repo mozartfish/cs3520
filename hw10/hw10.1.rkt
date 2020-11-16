@@ -3,6 +3,8 @@
 (define-type Value
   (numV [n : Number])
   (boolV [b : Boolean])
+  (pairV [fst : Value]
+         [snd : Value])
   (closV [arg : Symbol]
          [body : Exp]
          [env : Env]))
@@ -20,6 +22,10 @@
          [r : Exp])
   (equalE [l : Exp]
           [r : Exp])
+  (pairE [l : Exp]
+         [r : Exp])
+  (fstE [p : Exp])
+  (sndE [p : Exp])
   (lamE [n : Symbol]
         [arg-type : Type]
         [body : Exp])
@@ -30,7 +36,9 @@
   (numT)
   (boolT)
   (arrowT [arg : Type]
-          [result : Type]))
+          [result : Type])
+  (crossT [fst : Type]
+          [snd : Type]))
 
 (define-type Binding
   (bind [name : Symbol]
@@ -69,7 +77,16 @@
      (ifE (parse (second (s-exp->list s)))
             (parse (third (s-exp->list s)))
             (parse (fourth (s-exp->list s))))]
-            
+    ; pair parse
+    [(s-exp-match? `{pair ANY ANY} s)
+     (pairE (parse (second (s-exp->list s)))
+            (parse (third (s-exp->list s))))]
+    ; fst parse
+    [(s-exp-match? `{fst ANY} s)
+     (fstE (parse (second (s-exp->list s))))]
+    ; snd parse
+    [(s-exp-match? `{snd ANY} s)
+     (sndE (parse (second (s-exp->list s))))]
     [(s-exp-match? `{+ ANY ANY} s)
      (plusE (parse (second (s-exp->list s)))
             (parse (third (s-exp->list s))))]
@@ -105,6 +122,9 @@
    [(s-exp-match? `(ANY -> ANY) s)
     (arrowT (parse-type (first (s-exp->list s)))
             (parse-type (third (s-exp->list s))))]
+   [(s-exp-match? `(ANY * ANY) s)
+    (crossT (parse-type (first (s-exp->list s)))
+            (parse-type (third (s-exp->list s))))]
    [else (error 'parse-type "invalid input")]))
 
 (module+ test
@@ -136,6 +156,8 @@
         (boolT))
   (test (parse-type `(num -> bool))
         (arrowT (numT) (boolT)))
+  (test (parse-type `(num * bool))
+        (crossT (numT) (boolT)))
   (test/exn (parse-type `1)
             "invalid input"))
 
@@ -148,6 +170,15 @@
     [(equalE l r) (num= (interp l env) (interp r env))]
     [(plusE l r) (num+ (interp l env) (interp r env))]
     [(multE l r) (num* (interp l env) (interp r env))]
+    [(pairE l r) (pairV (interp l env) (interp r env))]
+    [(fstE p)
+     (type-case Value (interp p env)
+       [(pairV l r) l]
+       [else (error 'interp "not a pair")])]
+    [(sndE p)
+     (type-case Value (interp p env)
+       [(pairV l r) r]
+       [else (error 'interp "not a pair")])]
     [(ifE tst thn els)
      (type-case Value (interp tst env)
        [(boolV b)
@@ -288,6 +319,17 @@
          (boolT)
          (error 'typecheck "input type mismatch"))]
     [(ifE tst thn els) (typecheck-cond tst thn els tenv)]
+    [(pairE l r)
+     (crossT (typecheck l tenv) (typecheck r tenv))]
+    [(fstE p)
+     ; pairs are cross type
+     (type-case Type (typecheck p tenv)
+       [(crossT l r) l]
+       [else (error 'typecheck "not a pair")])]
+    [(sndE p)
+     (type-case Type (typecheck p tenv)
+       [(crossT l r) r]
+       [else (error 'typecheck "not a pair")])]
     [(plusE l r) (typecheck-nums l r tenv)]
     [(multE l r) (typecheck-nums l r tenv)]
     [(idE n) (type-lookup n tenv)]
@@ -378,13 +420,13 @@
 
 ;; Part 1 Tests
 (module+ test
-    (test (interp (parse `{if true 4 5})
+  (test (interp (parse `{if true 4 5})
                 mt-env)
-         (numV 4))
+        (numV 4))
   
   (test (interp (parse `{if false 4 5})
                 mt-env)
-         (numV 5))
+        (numV 5))
   
   (test (interp (parse `{if {= 13 {if {= 1 {+ -1 2}}
                                       12
@@ -392,13 +434,13 @@
                             4
                             5})
                 mt-env)
-         (numV 5))
+        (numV 5))
   
   (test (typecheck (parse `{= 13 {if {= 1 {+ -1 2}}
                                      12
                                      13}})
                    mt-env)
-         (boolT))
+        (boolT))
   
   (test (typecheck (parse `{if {= 1 {+ -1 2}}
                                {lambda {[x : num]} {+ x 1}}
@@ -418,4 +460,70 @@
                        mt-env)
             "typecheck: no type: (numE 1) not bool")
   )
+
+;; Part 2 Tests
+(module+ test
+  (test (interp (parse `{pair 10 8})
+                mt-env)
+        ;; Your constructor might be different than pairV:
+        (pairV (numV 10) (numV 8)))
+  
+  (test (interp (parse `{fst {pair 10 8}})
+                mt-env)
+        (numV 10))
+  
+  (test (interp (parse `{snd {pair 10 8}})
+                mt-env)
+        (numV 8))
+  
+  (test (interp (parse `{let {[p : (num * num) {pair 10 8}]}
+                          {fst p}})
+                mt-env)
+        (numV 10))
+  
+  (test (typecheck (parse `{pair 10 8})
+                   mt-env)
+        ;; Your constructor might be different than crossT:
+        (crossT (numT) (numT)))
+  
+  (test (typecheck (parse `{fst {pair 10 8}})
+                   mt-env)
+        (numT))
+  
+  (test (typecheck (parse `{+ 1 {snd {pair 10 8}}})
+                   mt-env)
+        (numT))
+  
+  (test (typecheck (parse `{lambda {[x : (num * bool)]}
+                             {fst x}})
+                   mt-env)
+        ;; Your constructor might be different than crossT:
+        (arrowT (crossT (numT) (boolT)) (numT)))
+  
+  (test (typecheck (parse `{{lambda {[x : (num * bool)]}
+                              {fst x}}
+                            {pair 1 false}})
+                   mt-env)
+        (numT))
+  
+  (test (typecheck (parse `{{lambda {[x : (num * bool)]}
+                              {snd x}}
+                            {pair 1 false}})
+                   mt-env)
+        (boolT))
+  
+  (test/exn (typecheck (parse `{fst 10})
+                       mt-env)
+            "no type")
+  
+  (test/exn (typecheck (parse `{+ 1 {fst {pair false 8}}})
+                       mt-env)
+            "no type")
+  
+  (test/exn (typecheck (parse `{lambda {[x : (num * bool)]}
+                                 {if {fst x}
+                                     1
+                                     2}})
+                       mt-env)
+            "no type"))
   

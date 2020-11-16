@@ -2,24 +2,17 @@
 
 (define-type Value
   (numV [n : Number])
-  (boolV [b : Boolean])
   (closV [arg : Symbol]
          [body : Exp]
          [env : Env]))
 
 (define-type Exp
   (numE [n : Number])
-  (boolE [b : Boolean])
   (idE [s : Symbol])
-  (ifE [tst : Exp]
-       [thn : Exp]
-       [else : Exp])
   (plusE [l : Exp] 
          [r : Exp])
   (multE [l : Exp]
          [r : Exp])
-  (equalE [l : Exp]
-          [r : Exp])
   (lamE [n : Symbol]
         [arg-type : Type]
         [body : Exp])
@@ -54,22 +47,7 @@
 (define (parse [s : S-Exp]) : Exp
   (cond
     [(s-exp-match? `NUMBER s) (numE (s-exp->number s))]
-    ; type case for the different booleans
-    [(s-exp-match? `SYMBOL s)
-     (cond
-       [(equal? s `true) (boolE #t)]
-       [(equal? s `false) (boolE #f)]
-       [else (idE (s-exp->symbol s))])]
-    ; equal parse
-    [(s-exp-match? `{= ANY ANY} s)
-     (equalE (parse (second (s-exp->list s)))
-            (parse (third (s-exp->list s))))]
-    ; if parse
-    [(s-exp-match? `{if ANY ANY ANY} s)
-     (ifE (parse (second (s-exp->list s)))
-            (parse (third (s-exp->list s)))
-            (parse (fourth (s-exp->list s))))]
-            
+    [(s-exp-match? `SYMBOL s) (idE (s-exp->symbol s))]
     [(s-exp-match? `{+ ANY ANY} s)
      (plusE (parse (second (s-exp->list s)))
             (parse (third (s-exp->list s))))]
@@ -143,18 +121,9 @@
 (define (interp [a : Exp] [env : Env]) : Value
   (type-case Exp a
     [(numE n) (numV n)]
-    [(boolE b) (boolV b)]
     [(idE s) (lookup s env)]
-    [(equalE l r) (num= (interp l env) (interp r env))]
     [(plusE l r) (num+ (interp l env) (interp r env))]
     [(multE l r) (num* (interp l env) (interp r env))]
-    [(ifE tst thn els)
-     (type-case Value (interp tst env)
-       [(boolV b)
-        (if b
-            (interp thn env)
-            (interp els env))]
-       [else (error 'interp "not a boolean")])]
     [(lamE n t body)
      (closV n body env)]
     [(appE fun arg) (type-case Value (interp fun env)
@@ -210,10 +179,7 @@
                               {let {[y : num 5]}
                                 {bad 2}}})
                     mt-env)
-            "free variable")
-  (test/exn (interp (parse `{if 1 4 5})
-                    mt-env)
-            "not a boolean"))
+            "free variable"))
 
 ;; num+ and num* ----------------------------------------
 (define (num-op [op : (Number Number -> Number)] [l : Value] [r : Value]) : Value
@@ -232,25 +198,6 @@
         (numV 3))
   (test (num* (numV 2) (numV 3))
         (numV 6)))
-
-;num= ------------------------------------------------------
-(define (num-eq-op [eq : (Number Number -> Boolean)] [l : Value] [r : Value]) : Value
-  (cond
-    [(and (numV? l) (numV? r))
-     (boolV (eq (numV-n l) (numV-n r)))]
-    [else
-     (error 'interp "not a number")]))
-(define (num= [l : Value] [r : Value]) : Value
-  (num-eq-op = l r))
-
-;Examples
-(module+ test
-  (test (num= (numV 1) (numV 2))
-        (boolV #f))
-  (test (num= (numV 1) (numV 1))
-        (boolV #t))
-  (test/exn (num= (numV 1) (boolV #t))
-            "not a number"))
 
 ;; lookup ----------------------------------------
 (define (make-lookup [name-of : ('a -> Symbol)] [val-of : ('a -> 'b)])
@@ -282,12 +229,6 @@
 (define (typecheck [a : Exp] [tenv : Type-Env])
   (type-case Exp a
     [(numE n) (numT)]
-    [(boolE b) (boolT)]
-    [(equalE l r)
-     (if (equal? (numT) (typecheck-nums l r tenv))
-         (boolT)
-         (error 'typecheck "input type mismatch"))]
-    [(ifE tst thn els) (typecheck-cond tst thn els tenv)]
     [(plusE l r) (typecheck-nums l r tenv)]
     [(multE l r) (typecheck-nums l r tenv)]
     [(idE n) (type-lookup n tenv)]
@@ -313,20 +254,6 @@
        [(numT) (numT)]
        [else (type-error r "num")])]
     [else (type-error l "num")]))
-
-
-
-; function for checking conditionals
-(define (typecheck-cond tst thn els tenv)
-  (type-case Type (typecheck tst tenv)
-    [(boolT)
-     (local [(define thn-type (typecheck thn tenv))]
-       (local [(define els-type (typecheck els tenv))]
-         (if (equal? thn-type els-type)
-             els-type
-             (error 'typecheck "input type mismatch"))))]
-    [else (type-error tst "bool")]))
-  
 
 (define (type-error a msg)
   (error 'typecheck (string-append
@@ -375,47 +302,3 @@
   (test/exn (typecheck (parse `{* {lambda {[x : num]} x} 1})
                        mt-env)
             "no type"))
-
-;; Part 1 Tests
-(module+ test
-    (test (interp (parse `{if true 4 5})
-                mt-env)
-         (numV 4))
-  
-  (test (interp (parse `{if false 4 5})
-                mt-env)
-         (numV 5))
-  
-  (test (interp (parse `{if {= 13 {if {= 1 {+ -1 2}}
-                                      12
-                                      13}}
-                            4
-                            5})
-                mt-env)
-         (numV 5))
-  
-  (test (typecheck (parse `{= 13 {if {= 1 {+ -1 2}}
-                                     12
-                                     13}})
-                   mt-env)
-         (boolT))
-  
-  (test (typecheck (parse `{if {= 1 {+ -1 2}}
-                               {lambda {[x : num]} {+ x 1}}
-                               {lambda {[y : num]} y}})
-                   mt-env)
-        ;; This result may need to be adjusted after part 3:
-        (arrowT (numT) (numT)))
-  
-  (test/exn (typecheck (parse `{+ 1 {if true true false}})
-                       mt-env)
-            "no type")
-
-  (test/exn (typecheck (parse `{+ 1 {if true true 1}})
-                       mt-env)
-            "input type mismatch")
-  (test/exn (typecheck (parse `{if 1 4 5})
-                       mt-env)
-            "typecheck: no type: (numE 1) not bool")
-  )
-  
