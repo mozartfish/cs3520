@@ -106,13 +106,14 @@
     [(s-exp-match? `{lambda {[SYMBOL : ANY] ...} ANY} s)
      (let ([args
             (map s-exp->list
-                 (map first(s-exp->list 
-                            (second (s-exp->list s)))))])
+                 (s-exp->list 
+                  (second (s-exp->list s))))])
        (lamE
         (map s-exp->symbol
-             (map first args
-             (parse-type (third args))
-             (parse (third (s-exp->list s)))))]
+             (map first args))
+        (map parse-type
+             (map third args))
+        (parse (third (s-exp->list s)))))]
 
     ; function parse
     [(s-exp-match? `{ANY ANY ...} s)
@@ -191,7 +192,7 @@
        [else (error 'interp "not a boolean")])]
     [(lamE n t body)
      (closV n body env)]
-    [(appE fun arg) (type-case Value (interp fun env)
+    [(appE fun args) (type-case Value (interp fun env)
                       [(closV n body c-env)
                        (interp body
                                (extend-env
