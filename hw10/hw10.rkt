@@ -88,8 +88,11 @@
      (let ([arg (s-exp->list
                  (first (s-exp->list 
                          (second (s-exp->list s)))))])
+       ; symbol 
        (lamE (s-exp->symbol (first arg))
+             ; type 
              (parse-type (third arg))
+             ; body 
              (parse (third (s-exp->list s)))))]
     [(s-exp-match? `{ANY ANY} s)
      (appE (parse (first (s-exp->list s)))
