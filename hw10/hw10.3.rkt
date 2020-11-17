@@ -54,6 +54,9 @@
 
 (define mt-env empty)
 (define extend-env cons)
+(define extend-env* append)
+
+
 
 (module+ test
   (print-only-errors #t))
@@ -206,10 +209,10 @@
     [(lamE n t body)
      (closV n body env)]
     [(appE fun args) (type-case Value (interp fun env)
-                      [(closV n body c-env)
+                      [(closV ns body c-env)
                        (interp body
-                               (extend-env
-                                (map2 bind n
+                               (extend-env*
+                                (map2 bind ns
                                       (map (lambda (arg) (interp arg env)) args))
                                 c-env))]
                       [else (error 'interp "not a function")])]))
@@ -345,10 +348,7 @@
      (type-case Type (typecheck a tenv)
        [(crossT fst snd) snd]
        [else (type-error a "pair")])]
-    [(equalE l r)
-     (if (equal? (numT) (typecheck-nums l r tenv))
-         (boolT)
-         (type-error r "num"))]
+    [(equalE l r) (typecheck-bools l r tenv)]
     [(ifE tst thn els) (typecheck-cond tst thn els tenv)]
     [(plusE l r) (typecheck-nums l r tenv)]
     [(multE l r) (typecheck-nums l r tenv)]
@@ -356,7 +356,7 @@
     [(lamE ns args-type body)
      (arrowT args-type
              (typecheck body
-                        (extend-env (map2 tbind ns args-type)
+                        (extend-env* (map2 tbind ns args-type)
                                     tenv)))]
     [(appE fun args)
      (type-case Type (typecheck fun tenv)
@@ -379,6 +379,21 @@
        [(numT) (numT)]
        [else (type-error r "num")])]
     [else (type-error l "num")]))
+
+(define (typecheck-bools l r tenv)
+  (type-case Type (typecheck l tenv)
+    [(numT)
+     (type-case Type (typecheck r tenv)
+       [(numT) (boolT)]
+       [else (type-error r "num")])]
+    [else (type-error l "num")]))
+
+(module+ test
+  (test/exn (typecheck-bools (numE 17) (boolE #t) mt-env)
+            "typecheck: no type: (boolE #t) not num")
+  (test/exn (typecheck-bools (boolE #t) (numE 17) mt-env)
+            "typecheck: no type: (boolE #t) not num"))
+  
 
 
 
@@ -450,7 +465,7 @@
   
   (test (interp (parse `{if false 4 5})
                 mt-env)
-         (numV 5))
+        (numV 5))
   
   (test (interp (parse `{if {= 13 {if {= 1 {+ -1 2}}
                                       12
@@ -458,13 +473,13 @@
                             4
                             5})
                 mt-env)
-         (numV 5))
+        (numV 5))
   
   (test (typecheck (parse `{= 13 {if {= 1 {+ -1 2}}
                                      12
                                      13}})
                    mt-env)
-         (boolT))
+        (boolT))
   
   (test (typecheck (parse `{if {= 1 {+ -1 2}}
                                {lambda {[x : num]} {+ x 1}}
@@ -539,6 +554,9 @@
   (test/exn (typecheck (parse `{fst 10})
                        mt-env)
             "no type")
+    (test/exn (typecheck (parse `{snd 10})
+                       mt-env)
+            "no type")
   
   (test/exn (typecheck (parse `{+ 1 {fst {pair false 8}}})
                        mt-env)
@@ -550,3 +568,45 @@
                                      2}})
                        mt-env)
             "no type"))
+
+; Part 3 Tests
+(module+ test
+    (test (interp (parse `{{lambda {}
+                           10}})
+                mt-env)
+        (numV 10))
+  
+  (test (interp (parse `{{lambda {[x : num] [y : num]} {+ x y}}
+                         10
+                         20})
+                mt-env)
+        (numV 30))
+  
+  
+  (test (typecheck (parse `{{lambda {[x : num] [y : bool]} y}
+                            10
+                            false})
+                   mt-env)
+        (boolT))
+  
+  (test/exn (typecheck (parse `{{lambda {[x : num] [y : bool]} y}
+                                false
+                                10})
+                       mt-env)
+            "no type")
+  
+  (test (typecheck (parse `{let {[x : num 4]}
+                             {let {[f : (num num -> num)
+                                      {lambda {[y : num] [z : num]}
+                                        {+ z y}}]}
+                               {f x x}}})
+                   mt-env)
+        (numT))
+  
+  (test (typecheck (parse `{let {[x : num 4]}
+                             {let {[f : (bool num -> num)
+                                      {lambda {[sel : bool] [z : num]}
+                                        {if sel x z}}]}
+                               {f {= x 5} 0}}})
+                   mt-env)
+        (numT)))
