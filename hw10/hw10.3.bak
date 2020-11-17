@@ -460,6 +460,7 @@
             "typecheck: no type: (numE 1) not bool")
   )
 
+; Part 2 Tests
 (module+ test
    (test (interp (parse `{pair 10 8})
                 mt-env)
