@@ -22,7 +22,7 @@
         [args-type : (Listof Type)]
         [body : Exp])
   (appE [fun : Exp]
-        [args: (Listof Exp)])
+        [args : (Listof Exp)])
   (idE [s : Symbol])
   (ifE [tst : Exp]
        [thn : Exp]
@@ -97,10 +97,10 @@
      (let ([bs (s-exp->list (first
                              (s-exp->list (second
                                            (s-exp->list s)))))])
-       (appE (lamE (s-exp->symbol (first bs))
-                   (parse-type (third bs))
+       (appE (lamE (list (s-exp->symbol (first bs)))
+                   (list (parse-type (third bs)))
                    (parse (third (s-exp->list s))))
-             (parse (fourth bs))))]
+             (list (parse (fourth bs)))))]
 
     ; lambda parse
     [(s-exp-match? `{lambda {[SYMBOL : ANY] ...} ANY} s)
@@ -127,9 +127,22 @@
      (numT)]
     [(s-exp-match? `bool s)
      (boolT)]
-    [(s-exp-match? `(ANY -> ANY) s)
-     (arrowT (parse-type (first (s-exp->list s)))
-             (parse-type (third (s-exp->list s))))]
+    [(s-exp-match? `(ANY ... -> ANY) s)
+     ; match [length(any) - 2]
+     ; first -> Any
+     ; reverse -> Any -> ...
+     (arrowT
+      (map parse-type
+           (reverse
+            ; -> ....
+            (rest
+             ; ...
+             (rest
+              ; reverse again to get in order
+                   (reverse (s-exp->list s))))))
+      ; reverse to get the result type
+      ; Any -> ...
+      (parse-type (first (reverse (s-exp->list s)))))]
     [(s-exp-match? `(ANY * ANY) s)
      (crossT (parse-type (first (s-exp->list s)))
              (parse-type (third (s-exp->list s))))]
@@ -149,12 +162,12 @@
                (numE 8)))
   (test (parse `{let {[x : num {+ 1 2}]}
                   y})
-        (appE (lamE 'x (numT) (idE 'y))
-              (plusE (numE 1) (numE 2))))
+        (appE (lamE (list'x) (list(numT)) (idE 'y))
+              (list (plusE (numE 1) (numE 2)))))
   (test (parse `{lambda {[x : num]} 9})
-        (lamE 'x (numT) (numE 9)))
+        (lamE (list 'x) (list (numT)) (numE 9)))
   (test (parse `{double 9})
-        (appE (idE 'double) (numE 9)))
+        (appE (idE 'double) (list (numE 9))))
   (test/exn (parse `{})
             "invalid input")
 
@@ -163,7 +176,7 @@
   (test (parse-type `bool)
         (boolT))
   (test (parse-type `(num -> bool))
-        (arrowT (numT) (boolT)))
+        (arrowT (list (numT)) (boolT)))
   (test/exn (parse-type `1)
             "invalid input"))
 
@@ -196,8 +209,8 @@
                       [(closV n body c-env)
                        (interp body
                                (extend-env
-                                (bind n
-                                      (interp arg env))
+                                (map2 bind n
+                                      (map (lambda (arg) (interp arg env)) args))
                                 c-env))]
                       [else (error 'interp "not a function")])]))
 
@@ -218,7 +231,7 @@
         (numV 19))
   (test (interp (parse `{lambda {[x : num]} {+ x x}})
                 mt-env)
-        (closV 'x (plusE (idE 'x) (idE 'x)) mt-env))
+        (closV (list 'x) (plusE (idE 'x) (idE 'x)) mt-env))
   (test (interp (parse `{let {[x : num 5]}
                           {+ x x}})
                 mt-env)
@@ -340,20 +353,24 @@
     [(plusE l r) (typecheck-nums l r tenv)]
     [(multE l r) (typecheck-nums l r tenv)]
     [(idE n) (type-lookup n tenv)]
-    [(lamE n arg-type body)
-     (arrowT arg-type
-             (typecheck body 
-                        (extend-env (tbind n arg-type)
+    [(lamE ns args-type body)
+     (arrowT args-type
+             (typecheck body
+                        (extend-env (map2 tbind ns args-type)
                                     tenv)))]
-    [(appE fun arg)
+    [(appE fun args)
      (type-case Type (typecheck fun tenv)
-       [(arrowT arg-type result-type)
-        (if (equal? arg-type
-                    (typecheck arg tenv))
-            result-type
-            (type-error arg
-                        (to-string arg-type)))]
+       [(arrowT args-type results-type)
+        ; create a list of all the arguments that are typechecked
+        ; for i in range length of args: typecheck args[i]
+        (if (equal? (map (lambda (arg) (typecheck arg tenv)) args) args-type)
+            results-type
+            (type-error args
+                        (to-string args-type)))]
        [else (type-error fun "function")])]))
+       
+        
+
 
 (define (typecheck-nums l r tenv)
   (type-case Type (typecheck l tenv)
@@ -396,9 +413,9 @@
   (test (typecheck (parse `{* 10 17}) mt-env)
         (numT))
   (test (typecheck (parse `{lambda {[x : num]} 12}) mt-env)
-        (arrowT (numT) (numT)))
+        (arrowT (list (numT)) (numT)))
   (test (typecheck (parse `{lambda {[x : num]} {lambda {[y : bool]} x}}) mt-env)
-        (arrowT (numT) (arrowT (boolT)  (numT))))
+        (arrowT (list (numT)) (arrowT (list (boolT))  (numT))))
 
   (test (typecheck (parse `{{lambda {[x : num]} 12}
                             {+ 1 17}})
@@ -454,7 +471,7 @@
                                {lambda {[y : num]} y}})
                    mt-env)
         ;; This result may need to be adjusted after part 3:
-        (arrowT (numT) (numT)))
+        (arrowT (list (numT)) (numT)))
   
   (test/exn (typecheck (parse `{+ 1 {if true true false}})
                        mt-env)
@@ -505,7 +522,7 @@
                              {fst x}})
                    mt-env)
         ;; Your constructor might be different than crossT:
-        (arrowT (crossT (numT) (boolT)) (numT)))
+        (arrowT (list (crossT (numT) (boolT))) (numT)))
   
   (test (typecheck (parse `{{lambda {[x : (num * bool)]}
                               {fst x}}
