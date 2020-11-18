@@ -11,7 +11,8 @@
 
 (define-type Exp
   (numE [n : Number])
-  (boolE [b : Boolean])
+  (trueE)
+  (falseE)
   (plusE [l : Exp] 
          [r : Exp])
   (multE [l : Exp]
@@ -65,12 +66,11 @@
 (define (parse [s : S-Exp]) : Exp
   (cond
     [(s-exp-match? `NUMBER s) (numE (s-exp->number s))]
-    ; type case for the different booleans
-    [(s-exp-match? `SYMBOL s)
-     (cond
-       [(equal? s `true) (boolE #t)]
-       [(equal? s `false) (boolE #f)]
-       [else (idE (s-exp->symbol s))])]
+    ; true
+    [(s-exp-match? `true s) (trueE)]
+    ; false 
+    [(s-exp-match? `false s) (falseE)]
+    [(s-exp-match? `SYMBOL s) (idE (s-exp->symbol s))]
     ; equal parse
     [(s-exp-match? `{= ANY ANY} s)
      (equalE (parse (second (s-exp->list s)))
@@ -187,7 +187,8 @@
 (define (interp [a : Exp] [env : Env]) : Value
   (type-case Exp a
     [(numE n) (numV n)]
-    [(boolE b) (boolV b)]
+    [(trueE ) (boolV #t)]
+    [(falseE ) (boolV #f)]
     [(idE s) (lookup s env)]
     [(equalE l r) (num= (interp l env) (interp r env))]
     [(plusE l r) (num+ (interp l env) (interp r env))]
@@ -337,7 +338,8 @@
 (define (typecheck [a : Exp] [tenv : Type-Env])
   (type-case Exp a
     [(numE n) (numT)]
-    [(boolE b) (boolT)]
+    [(trueE) (boolT)]
+    [(falseE) (boolT)]
     [(pairE l r)
      (crossT (typecheck l tenv) (typecheck r tenv))]
     [(fstE a)
@@ -389,10 +391,10 @@
     [else (type-error l "num")]))
 
 (module+ test
-  (test/exn (typecheck-bools (numE 17) (boolE #t) mt-env)
-            "typecheck: no type: (boolE #t) not num")
-  (test/exn (typecheck-bools (boolE #t) (numE 17) mt-env)
-            "typecheck: no type: (boolE #t) not num"))
+  (test/exn (typecheck-bools (numE 17) (trueE) mt-env)
+            "typecheck: no type: (trueE) not num")
+  (test/exn (typecheck-bools (trueE) (numE 17) mt-env)
+            "typecheck: no type: (trueE) not num"))
   
 
 
