@@ -535,3 +535,48 @@
         #t)
   (test (occurs? a-type-var (arrowT (numT) a-type-var))
         #t))
+
+;run-prog--------------------------------------------------------
+(define (run-prog [s : S-Exp]) :  S-Exp
+  (let ([p (parse s)])
+    (begin
+      (typecheck p mt-env)
+      (type-case Value (interp p mt-env)
+        [(numV n) (number->s-exp n)]
+        [(closV args body env) `function]
+        [(listV elems) `list]))))
+
+;; part 1 test cases
+(module+ test
+   (test (run-prog `1)
+        `1)
+  
+  (test (run-prog `{if0 0 1 2})
+        `1)
+  (test (run-prog `{if0 2 1 0})
+        `0)
+  (test (run-prog `{if0 2 {lambda {[x : ?]} x} {lambda {[x : ?]} {+ 1 x}}})
+        `function)
+  (test/exn (run-prog `{if0 {lambda {[x : ?]} x} 1 2})
+            "no type")
+  (test/exn (run-prog `{if0 0 {lambda {[x : ?]} x} 2})
+            "no type")
+  (test (run-prog `{let {[f : ?
+                            {lambda {[x : ?]}
+                             {lambda {[y : ?]}
+                              {lambda {[z : ?]}
+                               {if0 x y z}}}}]}
+                    {{{f 1} 2} 3}})
+        `3)
+  (test (run-prog `{let {[f : ?
+                            {lambda {[x : ?]}
+                             {lambda {[y : ?]}
+                              {lambda {[z : ?]}
+                               {if0 x y {lambda ([x : ?]) z}}}}}]}
+                    {{{{f 1} {lambda {[x : num]} 2}} 3} 4}})
+        `3)
+  (test/exn (run-prog `{let {[f : ?
+                                {lambda {[x : ?]}
+                                 {if0 x x {x 1}}}]}
+                        {f 1}})
+            "no type"))
