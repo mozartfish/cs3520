@@ -8,6 +8,8 @@
          [rhs : Exp])
   (argE)
   (thisE)
+  (castE [class-name : Symbol]
+         [obj-expr : Exp])
   (newE [class-name : Symbol]
         [args : (Listof Exp)])
   (getE [obj-expr : Exp]
@@ -18,13 +20,8 @@
   (ssendE [obj-expr : Exp]
           [class-name : Symbol]
           [method-name : Symbol]
-          [arg-expr : Exp])
-  (castE [class-name : Symbol]
-         [obj-expr : Exp]))
+          [arg-expr : Exp]))
 
-; modify Class definition
-; to include the name of the class similar to
-; class type check and inherit check
 (define-type Class
   (classC
    [super-name : Symbol]
@@ -88,6 +85,16 @@
                            field-vals)
                      field-name)])]
            [else (error 'interp "not an object")])]
+        ; castE interp
+        [(castE class-name obj-expr)
+         (local [(define obj (recur obj-expr))]
+           (type-case Value obj
+             [(objV obj-class-name obj-field-vals)
+              (if (subclass? obj-class-name class-name classes)
+                  obj
+                  (error 'interp "invalid cast: not an instance of a class/one of its subclasses"))]
+             [else (error 'interp "not an object")]))]
+         
         [(sendE obj-expr method-name arg-expr)
          (local [(define obj (recur obj-expr))
                  (define arg-val (recur arg-expr))]
@@ -96,38 +103,11 @@
               (call-method class-name method-name classes
                            obj arg-val)]
              [else (error 'interp "not an object")]))]
-        ; castE
-        [(castE class-name obj-expr)
-         (local [(define obj (recur obj-expr))]
-           (type-case Value obj
-             [(objV obj-class-name obj-field-vals)
-              ; need a helper function of some sorts that
-              ; helps us determine whether an object
-              (if (subclass? obj-class-name class-name classes)
-                  obj
-                  (error 'interp "invalid cast"))]
-             [else (error 'interp "not an object")]))]
         [(ssendE obj-expr class-name method-name arg-expr)
          (local [(define obj (recur obj-expr))
                  (define arg-val (recur arg-expr))]
            (call-method class-name method-name classes
                         obj arg-val))]))))
-
-; helper function
-; takes a class name and returns a boolean determining
-; if the object is of a certain class type or one of its subtypes
-(define (subclass? obj-class-name class-name classes)
-  (cond
-    ; CASE 1: object class cannot be Object because Object doesn't have any fields or methods
-    [(equal? obj-class-name 'Object) #f]
-    ; CASE 2: object class is an instance of class-name or one of its subclasses
-    [(equal? obj-class-name class-name) #t]
-    ; CASE 3: if not one of the first two cases, look through the list of classes
-    ; checking if there is a potential match
-    [else
-     (type-case Class (find classes obj-class-name)
-       [(classC super-name field-names methods)
-        (subclass? super-name class-name classes)])]))
 
 (define (call-method class-name method-name classes
                      obj arg-val)
@@ -151,6 +131,31 @@
 (define (num+ x y) (num-op + '+ x y))
 (define (num* x y) (num-op * '* x y))
 
+; sub-class helper function
+(define (subclass? obj-class-name class-name classes)
+  (cond
+    [(equal? obj-class-name class-name) #t]
+    [(equal? obj-class-name 'Object) #f]
+    [else
+     (type-case Class (find classes obj-class-name)
+       [(classC super-name field-names methods)
+        (subclass? super-name class-name classes)])]))
+
+(module+ test
+  (test (subclass? 'Object 'Object empty)
+        #t)
+  (test (subclass? 'A 'Object (list (values 'A (classC 'Object empty empty))))
+        #t)
+  (test (subclass? 'Object 'A (list (values 'A (classC 'Object empty empty))))
+        #f)
+  (test (subclass? 'B 'A (list (values 'A (classC 'Object empty empty))
+                               (values 'B (classC 'A empty empty))))
+        #t)
+  (test (subclass? 'B 'Object (list (values 'A (classC 'Object empty empty))
+                                    (values 'B (classC 'A empty empty))))
+        #t))
+
+
 ;; ----------------------------------------
 ;; Examples
 
@@ -158,7 +163,7 @@
   (define posn-class
     (values 'Posn
             (classC
-             'Posn
+             'Object
              (list 'x 'y)
              (list (values 'mdist
                            (plusE (getE (thisE) 'x) (getE (thisE) 'y)))
@@ -173,7 +178,7 @@
   (define posn3D-class
     (values 'Posn3D
             (classC
-             'Posn3D
+             'Posn
              (list 'x 'y 'z)
              (list (values 'mdist (plusE (getE (thisE) 'z)
                                          (ssendE (thisE) 'Posn 'mdist (argE))))
@@ -186,7 +191,17 @@
     (interp a (list posn-class posn3D-class) (numV -1) (numV -1))))
 
 ;; ----------------------------------------
+; castE test cases
+(module+ test
+  (test/exn (interp-posn (castE 'Posn3D posn27))
+            "interp: invalid cast: not an instance of a class/one of its subclasses")
+  (test/exn (interp-posn (castE 'Posn (plusE (numE 1) (numE 2))))
+            "not an object")
+  (test (interp-posn (castE 'Posn posn27))
+        (objV 'Posn (list (numV 2) (numV 7))))
 
+  (test (interp-posn (castE 'Posn posn531))
+        (objV 'Posn3D (list (numV 5) (numV 3) (numV 1)))))
 (module+ test
   (test (interp (numE 10) 
                 empty (objV 'Object empty) (numV 0))
@@ -200,16 +215,6 @@
 
   (test (interp-posn (newE 'Posn (list (numE 2) (numE 7))))
         (objV 'Posn (list (numV 2) (numV 7))))
-
-  ; castE test cases
-  (test (interp-posn (castE 'Posn (newE 'Posn (list (numE 2) (numE 7)))))
-        (objV 'Posn (list (numV 2) (numV 7))))
-  (test/exn (interp-posn (castE 'Posn3D (newE 'Posn (list (numE 2) (numE 7)))))
-            "invalid cast")
-  (test/exn (interp-posn (castE 'Posn (plusE (numE 10) (numE 7))))
-            "not an object")
-                         
-  
 
   (test (interp-posn (sendE posn27 'mdist (numE 0)))
         (numV 9))

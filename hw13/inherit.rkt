@@ -42,7 +42,6 @@
       [(numI n) (numE n)]
       [(plusI l r) (plusE (recur l) (recur r))]
       [(multI l r) (multE (recur l) (recur r))]
-      ; castI
       [(castI class-name obj-expr)
        (castE class-name (recur obj-expr))]
       [(argI) (argE)]
@@ -84,6 +83,7 @@
   (test (exp-i->c (castI 'Posn (newI 'Posn (list (numI 2) (numI 7)))) 'Posn)
         (castE 'Posn (newE 'Posn (list (numE 2) (numE 7))))))
   
+  
 
 ;; ----------------------------------------
 
@@ -108,14 +108,12 @@
             (plusE (getE (thisE) 'z)
                    (ssendE (thisE) 'Posn 'mdist (argE)))))
 
-  ;posn3D is a subclass of posn
   (define posn3d-i-class 
     (values 'Posn3D
             (classI
              'Posn
              (list 'z)
              (list posn3d-mdist-i-method))))
-  
   (define posn3d-c-class-not-flat
     (values 'Posn3D
             (classC
@@ -146,7 +144,7 @@
   (type-case ClassI (find i-classes name)
     [(classI super-name field-names i-methods)
      (if (equal? super-name 'Object)
-         (classC super-name empty empty)
+         (classC 'Object empty empty)
          (flatten-class super-name
                         classes-not-flat
                         i-classes))]))

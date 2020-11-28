@@ -143,19 +143,6 @@
                                 class-name
                                 t-classes)]
            [else (type-error obj-expr "object")])]
-        ; castI
-        [(castI class-name obj-expr)
-         (local [(define obj-expr-type (recur obj-expr))]
-           (type-case Type obj-expr-type
-             [(objT obj-expr-class-name)
-              (if (or (is-subtype? obj-expr-type (objT class-name) t-classes)
-                      (is-subtype? (objT class-name) obj-expr-type t-classes))
-                  (objT class-name)
-                  (type-error obj-expr "object"))]
-             [else
-              (type-error obj-expr "object")]))]
-               
-                     
         [(sendI obj-expr method-name arg-expr)
          (local [(define obj-type (recur obj-expr))
                  (define arg-type (recur arg-expr))]
@@ -279,10 +266,6 @@
   
   (define new-posn27 (newI 'Posn (list (numI 2) (numI 7))))
   (define new-posn531 (newI 'Posn3D (list (numI 5) (numI 3) (numI 1))))
-
-  ; castI tests
-  (test (typecheck-posn (castI 'Posn new-posn531))
-        (objT 'Posn))
 
   (test (typecheck-posn (sendI new-posn27 'mdist (numI 0)))
         (numT))

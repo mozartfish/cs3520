@@ -78,6 +78,8 @@
   ; castI test case
   (test (parse `{cast Posn {new Posn 1 2}})
         (castI 'Posn (newI 'Posn (list (numI 1) (numI 2)))))
+    (test (parse `{cast Posn3D {new Posn3D 1 2 3}})
+        (castI 'Posn3D (newI 'Posn3D (list (numI 1) (numI 2) (numI 3)))))
   (test (parse `{get 1 x})
         (getI (numI 1) 'x))
   (test (parse `{send 1 m 2})
