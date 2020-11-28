@@ -283,6 +283,15 @@
   ; castI tests
   (test (typecheck-posn (castI 'Posn new-posn531))
         (objT 'Posn))
+  (test (typecheck-posn (castI 'Posn3D new-posn27))
+        (objT 'Posn3D))
+  (test/exn (typecheck-posn (castI 'Posn (plusI (numI 2) (numI 7))))
+            "no type")
+    (test/exn (typecheck-posn (castI 'Square new-posn27))
+            "no type")
+  
+  
+
 
   (test (typecheck-posn (sendI new-posn27 'mdist (numI 0)))
         (numT))
