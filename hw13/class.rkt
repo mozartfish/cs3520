@@ -8,8 +8,6 @@
          [rhs : Exp])
   (argE)
   (thisE)
-  (castE [class-name : Symbol]
-         [obj-expr : Exp])
   (newE [class-name : Symbol]
         [args : (Listof Exp)])
   (getE [obj-expr : Exp]
@@ -20,7 +18,14 @@
   (ssendE [obj-expr : Exp]
           [class-name : Symbol]
           [method-name : Symbol]
-          [arg-expr : Exp]))
+          [arg-expr : Exp])
+  (castE [class-name : Symbol]
+         [obj-expr : Exp])
+  (if0E [tst : Exp]
+        [thn : Exp]
+        [els : Exp]))
+  
+  
 
 (define-type Class
   (classC
@@ -94,6 +99,13 @@
                   obj
                   (error 'interp "invalid cast: not an instance of a class/one of its subclasses"))]
              [else (error 'interp "not an object")]))]
+        ; ifE interp
+        [(if0E tst thn els)
+         (type-case Value (recur tst)
+           [(numV n) (if (= n 0)
+                         (recur thn)
+                         (recur els))]
+           [else (error 'interp "not a number")])]
          
         [(sendE obj-expr method-name arg-expr)
          (local [(define obj (recur obj-expr))
@@ -202,6 +214,20 @@
 
   (test (interp-posn (castE 'Posn posn531))
         (objV 'Posn3D (list (numV 5) (numV 3) (numV 1)))))
+;;--------------------------------------------
+; if0E test cases
+(module+ test
+  (test (interp (if0E (numE 1) (numE 3) (numE 5))
+                empty (objV 'Object empty) (numV 0))
+        (numV 5))
+  (test (interp (if0E (numE 0) (numE 3) (numE 5))
+                empty (objV 'Object empty) (numV 0))
+        (numV 3))
+  (test/exn (interp-posn (if0E (castE 'Object (newE 'Posn (list (numE 2) (numE 7))))
+                               (numE 1) (numE 5)))
+            "not a number"))
+                    
+;; -------------------------------------------
 (module+ test
   (test (interp (numE 10) 
                 empty (objV 'Object empty) (numV 0))
