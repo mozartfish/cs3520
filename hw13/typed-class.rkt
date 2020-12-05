@@ -15,7 +15,8 @@
 
 (define-type Type
   (numT)
-  (objT [class-name : Symbol]))
+  (objT [class-name : Symbol])
+  (nullT))
 
 (module+ test
   (print-only-errors #t))
@@ -168,9 +169,9 @@
               ; a third specific type
               (least-upper-bound thn-type els-type t-classes)]
              [else (type-error tst "num")]))]
-         
-               
-                     
+        
+        ; nullI
+        [(nullI) (nullT)]    
         [(sendI obj-expr method-name arg-expr)
          (local [(define obj-type (recur obj-expr))
                  (define arg-type (recur arg-expr))]
@@ -222,6 +223,11 @@
          (least-upper-bound t1 (objT (classT-super-name
                                       (find t-classes t2-class-name)))
                             t-classes))]
+       [else (error 'Typecheck "type mismatch")])]
+    [(nullT)
+     (type-case Type t2
+       [(nullT) (nullT)]
+       [(objT t2-class-name) (nullT)]
        [else (error 'Typecheck "type mismatch")])]))
        
      
@@ -339,6 +345,8 @@
         (numT))
   (test/exn (least-upper-bound (numT) (objT 'Posn)(list posn3D-t-class posn-t-class square-t-class))
             "Typecheck: type mismatch")
+  (test (least-upper-bound (nullT) (nullT) (list posn3D-t-class posn-t-class square-t-class))
+        (nullT))
   ;;---------------------------------------------------------------------------------------------------
 
   (test (typecheck-posn (sendI new-posn27 'mdist (numI 0)))
