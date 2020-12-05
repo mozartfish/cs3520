@@ -18,11 +18,20 @@
   (ssendE [obj-expr : Exp]
           [class-name : Symbol]
           [method-name : Symbol]
-          [arg-expr : Exp]))
+          [arg-expr : Exp])
+  (castE [class-name : Symbol]
+         [obj-expr : Exp])
+  (if0E [tst : Exp]
+        [thn : Exp]
+        [els : Exp]))
+  
+  
 
 (define-type Class
-  (classC [field-names : (Listof Symbol)]
-          [methods : (Listof (Symbol * Exp))]))
+  (classC
+   [super-name : Symbol]
+   [field-names : (Listof Symbol)]
+   [methods : (Listof (Symbol * Exp))]))
 
 (define-type Value
   (numV [n : Number])
@@ -75,12 +84,29 @@
          (type-case Value (recur obj-expr)
            [(objV class-name field-vals)
             (type-case Class (find classes class-name)
-              [(classC field-names methods)
+              [(classC super-name field-names methods)
                (find (map2 (lambda (n v) (values n v))
                            field-names
                            field-vals)
                      field-name)])]
            [else (error 'interp "not an object")])]
+        ; castE interp
+        [(castE class-name obj-expr)
+         (local [(define obj (recur obj-expr))]
+           (type-case Value obj
+             [(objV obj-class-name obj-field-vals)
+              (if (subclass? obj-class-name class-name classes)
+                  obj
+                  (error 'interp "invalid cast: not an instance of a class/one of its subclasses"))]
+             [else (error 'interp "not an object")]))]
+        ; ifE interp
+        [(if0E tst thn els)
+         (type-case Value (recur tst)
+           [(numV n) (if (= n 0)
+                         (recur thn)
+                         (recur els))]
+           [else (error 'interp "not a number")])]
+         
         [(sendE obj-expr method-name arg-expr)
          (local [(define obj (recur obj-expr))
                  (define arg-val (recur arg-expr))]
@@ -98,7 +124,7 @@
 (define (call-method class-name method-name classes
                      obj arg-val)
   (type-case Class (find classes class-name)
-    [(classC field-names methods)
+    [(classC super-name field-names methods)
      (let ([body-expr (find methods method-name)])
        (interp body-expr
                classes
@@ -117,13 +143,39 @@
 (define (num+ x y) (num-op + '+ x y))
 (define (num* x y) (num-op * '* x y))
 
+; sub-class helper function
+(define (subclass? obj-class-name class-name classes)
+  (cond
+    [(equal? obj-class-name class-name) #t]
+    [(equal? obj-class-name 'Object) #f]
+    [else
+     (type-case Class (find classes obj-class-name)
+       [(classC super-name field-names methods)
+        (subclass? super-name class-name classes)])]))
+
+(module+ test
+  (test (subclass? 'Object 'Object empty)
+        #t)
+  (test (subclass? 'A 'Object (list (values 'A (classC 'Object empty empty))))
+        #t)
+  (test (subclass? 'Object 'A (list (values 'A (classC 'Object empty empty))))
+        #f)
+  (test (subclass? 'B 'A (list (values 'A (classC 'Object empty empty))
+                               (values 'B (classC 'A empty empty))))
+        #t)
+  (test (subclass? 'B 'Object (list (values 'A (classC 'Object empty empty))
+                                    (values 'B (classC 'A empty empty))))
+        #t))
+
+
 ;; ----------------------------------------
 ;; Examples
 
 (module+ test
   (define posn-class
     (values 'Posn
-            (classC 
+            (classC
+             'Object
              (list 'x 'y)
              (list (values 'mdist
                            (plusE (getE (thisE) 'x) (getE (thisE) 'y)))
@@ -137,7 +189,8 @@
     
   (define posn3D-class
     (values 'Posn3D
-            (classC 
+            (classC
+             'Posn
              (list 'x 'y 'z)
              (list (values 'mdist (plusE (getE (thisE) 'z)
                                          (ssendE (thisE) 'Posn 'mdist (argE))))
@@ -150,7 +203,31 @@
     (interp a (list posn-class posn3D-class) (numV -1) (numV -1))))
 
 ;; ----------------------------------------
+; castE test cases
+(module+ test
+  (test/exn (interp-posn (castE 'Posn3D posn27))
+            "interp: invalid cast: not an instance of a class/one of its subclasses")
+  (test/exn (interp-posn (castE 'Posn (plusE (numE 1) (numE 2))))
+            "not an object")
+  (test (interp-posn (castE 'Posn posn27))
+        (objV 'Posn (list (numV 2) (numV 7))))
 
+  (test (interp-posn (castE 'Posn posn531))
+        (objV 'Posn3D (list (numV 5) (numV 3) (numV 1)))))
+;;--------------------------------------------
+; if0E test cases
+(module+ test
+  (test (interp (if0E (numE 1) (numE 3) (numE 5))
+                empty (objV 'Object empty) (numV 0))
+        (numV 5))
+  (test (interp (if0E (numE 0) (numE 3) (numE 5))
+                empty (objV 'Object empty) (numV 0))
+        (numV 3))
+  (test/exn (interp-posn (if0E (castE 'Object (newE 'Posn (list (numE 2) (numE 7))))
+                               (numE 1) (numE 5)))
+            "not a number"))
+                    
+;; -------------------------------------------
 (module+ test
   (test (interp (numE 10) 
                 empty (objV 'Object empty) (numV 0))

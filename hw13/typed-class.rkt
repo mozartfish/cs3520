@@ -157,7 +157,7 @@
         ; if0I
         [(if0I tst thn els)
          (local [(define tst-type (recur tst))
-                 (define thn-type (recur tst))
+                 (define thn-type (recur thn))
                  (define els-type (recur els))]
            ; check whether tst is a number
            (type-case Type tst-type
@@ -318,7 +318,7 @@
   (define new-posn27 (newI 'Posn (list (numI 2) (numI 7))))
   (define new-posn531 (newI 'Posn3D (list (numI 5) (numI 3) (numI 1))))
 
-  ; castI typecheck
+  ; castI typecheck-----------------------------------------------------
   (test (typecheck-posn (castI 'Posn new-posn531))
         (objT 'Posn))
   (test (typecheck-posn (castI 'Posn3D new-posn27))
@@ -327,9 +327,9 @@
             "no type")
   (test/exn (typecheck-posn (castI 'Square new-posn27))
             "no type")
-
-  ; least-upper-bound test
-  (test (least-upper-bound (objT 'Posn) (objT 'Posn3D)(list posn3D-t-class posn-t-class))
+  ;;-----------------------------------------------------------------------
+  ; least-upper-bound test-----------------------------------------------------------------------------
+  (test (least-upper-bound (objT 'Posn) (objT 'Posn3D)(list posn3D-t-class posn-t-class square-t-class))
         (objT 'Posn))
   (test (least-upper-bound (objT 'Posn) (objT 'Square)(list posn3D-t-class posn-t-class square-t-class))
         (objT 'Object))
@@ -339,6 +339,7 @@
         (numT))
   (test/exn (least-upper-bound (numT) (objT 'Posn)(list posn3D-t-class posn-t-class square-t-class))
             "Typecheck: type mismatch")
+  ;;---------------------------------------------------------------------------------------------------
 
   (test (typecheck-posn (sendI new-posn27 'mdist (numI 0)))
         (numT))
@@ -358,13 +359,27 @@
                    empty)
         (numT))
 
-  ; if0I
+  ; if0I------------------------------------------------------------------------------
   (test (typecheck (if0I (numI 0) (numI 1) (numI 2))
                    empty)
         (numT))
+  (test/exn (typecheck-posn (if0I (numI 0) (numI 1) new-posn27))
+            "Typecheck: type mismatch")
+  
   (test/exn (typecheck (if0I (newI 'Object empty) (numI 1) (numI 2))
                        empty)
-            "no type")
+            "typecheck: no type: (newI 'Object '()) not num")
+  
+  (test/exn (typecheck-posn (if0I new-posn27 (numI 1) (numI 2)))
+            "typecheck: no type: (newI 'Posn (list (numI 2) (numI 7))) not num")
+  (test (typecheck-posn (if0I (numI 0) new-posn27 new-posn531))
+        (objT 'Posn))
+  (test (typecheck-posn (if0I (numI 1) new-posn27 new-posn531))
+        (objT 'Posn))
+  (test/exn (typecheck-posn (if0I (numI 0) new-posn27 (numI 1)))
+            "Typecheck: type mismatch")
+  ;;----------------------------------------------------------------------------------
+  
 
   (test/exn (typecheck-posn (sendI (numI 10) 'mdist (numI 0)))
             "no type")
