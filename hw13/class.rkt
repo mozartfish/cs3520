@@ -40,7 +40,6 @@
 
 (define-type Value
   (numV [n : Number])
-  (boxV [b : (Boxof Value)])
   (objV [class-name : Symbol]
         [field-values : (Listof (Boxof Value))])
   (nullV))

@@ -49,6 +49,11 @@
    [(s-exp-match? `{get ANY SYMBOL} s)
     (getI (parse (second (s-exp->list s)))
           (s-exp->symbol (third (s-exp->list s))))]
+   ; setI parse
+   [(s-exp-match? `{set ANY SYMBOL ANY} s)
+    (setI (parse (second (s-exp->list s)))
+          (s-exp->symbol (third (s-exp->list s)))
+          (parse (fourth (s-exp->list s))))]
    ; castI parse
    [(s-exp-match? `{cast SYMBOL ANY} s)
     (castI (s-exp->symbol (second (s-exp->list s)))
@@ -97,6 +102,9 @@
         (castI 'Posn3D (newI 'Posn3D (list (numI 1) (numI 2) (numI 3)))))
   (test (parse `{get 1 x})
         (getI (numI 1) 'x))
+  ; setI test case
+  (test (parse `{set {new Posn3D 1 2 3} x 10})
+        (setI (newI 'Posn3D (list (numI 1) (numI 2) (numI 3))) 'x (numI 10)))
   (test (parse `{send 1 m 2})
         (sendI (numI 1) 'm (numI 2)))
   (test (parse `{super m 1})

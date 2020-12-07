@@ -58,6 +58,9 @@
     (if0I (parse (second (s-exp->list s)))
           (parse (third (s-exp->list s)))
           (parse (fourth (s-exp->list s))))]
+   ; nullI parse
+   [(s-exp-match? `{null} s)
+    (nullI)]
    [(s-exp-match? `{send ANY SYMBOL ANY} s)
     (sendI (parse (second (s-exp->list s)))
            (s-exp->symbol (third (s-exp->list s)))
@@ -86,6 +89,10 @@
   ;if0I test case
   (test (parse `{if0 1 3 5})
         (if0I (numI 1) (numI 3) (numI 5)))
+  ; nullI test case
+  (test (parse `{null})
+        (nullI))
+  ; castI test case
   (test (parse `{cast Posn3D {new Posn3D 1 2 3}})
         (castI 'Posn3D (newI 'Posn3D (list (numI 1) (numI 2) (numI 3)))))
   (test (parse `{get 1 x})
@@ -126,7 +133,8 @@
                      (map parse-class classes))])
     (type-case Value v
       [(numV n) (number->s-exp n)]
-      [(objV class-name field-vals) `object])))
+      [(objV class-name field-vals) `object]
+      [(nullV) `null])))
 
 (module+ test
   (test (interp-prog
