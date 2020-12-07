@@ -12,6 +12,10 @@
         [args : (Listof Exp)])
   (getE [obj-expr : Exp]
         [field-name : Symbol])
+  (setE [obj-expr : Exp]
+        [field-name : Symbol]
+        [field-value : Exp])
+        
   (sendE [obj-expr : Exp]
          [method-name : Symbol]
          [arg-expr : Exp])
@@ -24,10 +28,7 @@
   (if0E [tst : Exp]
         [thn : Exp]
         [els : Exp])
-  (nullE)
-  (setE [obj-expr : Exp]
-        [field-name : Symbol]
-        [field-value : Value]))
+  (nullE))
   
   
 
@@ -40,8 +41,8 @@
 (define-type Value
   (numV [n : Number])
   (boxV [b : (Boxof Value)])
- (objV [class-name : Symbol]
-       [field-values : (Listof (Boxof Value))])
+  (objV [class-name : Symbol]
+        [field-values : (Listof (Boxof Value))])
   (nullV))
 
 (module+ test
@@ -82,7 +83,7 @@
         [(argE) arg-val]
         [(newE class-name field-exprs)
          (local [(define c (find classes class-name))
-                 (define vals (map recur field-exprs))]
+                 (define vals (map box (map recur field-exprs)))]
            (if (= (length vals) (length (classC-field-names c)))
                (objV class-name vals)
                (error 'interp "wrong field count")))]
@@ -95,17 +96,18 @@
                            field-names
                            (map unbox field-vals))
                      field-name)])]
-                         
            [else (error 'interp "not an object")])]
         ; setE interp
-        [(setE obj-expr field-name field-value)
+        [(setE obj-expr field-name new-field-value)
          (type-case Value (recur obj-expr)
            [(objV class-name field-vals)
             (type-case Class (find classes class-name)
               [(classC super-name field-names methods)
-               ....])]
-           [ else (error 'interp "not an object")])]
-              
+               ;; need a helper function of some sorts to set the field value
+               (begin
+                 (set-field field-names field-vals field-name (recur new-field-value))
+                 (objV class-name field-vals))])]
+           [else (error 'interp "not an object")])]
         ; castE interp
         [(castE class-name obj-expr)
          (local [(define obj (recur obj-expr))]
@@ -185,22 +187,46 @@
         #t))
 
 ; set-field helper function
-; each field value needs its own box for an object
-; list of boxes
-(define (set-field [field-vals : (Listof (Boxof Value))]
-                   [field-names : (Listof Symbol)]
+; need a function that takes a list of field names
+; list of field values that find a field and updates its corrsponding value
+(define (set-field [field-names : (Listof Symbol)]
+                   [field-values : (Listof (Boxof Value))]
                    [field-name : Symbol]
-                   [field-val : Value])
-  ;; check the list of names to see if contains the field
+                   [new-field-value : Value])
+  ;; check if the list of field names is empty
   (type-case (Listof Symbol) field-names
     [empty (error 'interp "field does not exist")]
     [(cons first-name rst-names)
      (if (symbol=? first-name field-name)
-         (set-box! (first field-vals) field-val)
-         (set-field (rest field-vals) rst-names field-name field-val))]))
+         (set-box! (first field-values) new-field-value)
+         (set-field rst-names (rest field-values) field-name new-field-value))]))
 
+;; test cases
+(module+ test
+  (test
+   (let ([field-names (list 'x 'y 'z)])
+     (let ([field-values (list (box (numV 1)) (box (numV 2)) (box (numV 3)))])
+       (begin
+         (set-field field-names field-values 'x (numV 5))
+         (unbox (first field-values)))))
+   (numV 5))
 
-   ;; ----------------------------------------
+  (test/exn
+   (let ([field-names (list 'x 'y)])
+     (let ([field-values (list (box (numV 1)) (box (numV 2)) (box (numV 3)))])
+         (set-field field-names field-values 'z (numV 5))))
+   "interp: field does not exist")
+
+  (test
+   (let ([field-names (list 'x 'y 'z)])
+     (let ([field-values (list (box (numV 1)) (box (numV 2)) (box (numV 3)))])
+       (begin
+         (set-field field-names field-values 'z (numV 10))
+         (unbox (third field-values)))))
+   (numV 10)))
+  
+
+  ;; ----------------------------------------
 ;; Examples
 
 (module+ test
@@ -217,7 +243,9 @@
                    (values 'addX
                            (plusE (getE (thisE) 'x) (argE)))
                    (values 'multY (multE (argE) (getE (thisE) 'y)))
-                   (values 'factory12 (newE 'Posn (list (numE 1) (numE 2))))))))
+                   (values 'factory12 (newE 'Posn (list (numE 1) (numE 2))))
+                   (values 'multSetY
+                           (multE (argE) (getE (setE (thisE) 'y (numE 2)) 'y)))))))
     
   (define posn3D-class
     (values 'Posn3D
@@ -242,10 +270,10 @@
   (test/exn (interp-posn (castE 'Posn (plusE (numE 1) (numE 2))))
             "not an object")
   (test (interp-posn (castE 'Posn posn27))
-        (objV 'Posn (list (numV 2) (numV 7))))
+        (objV 'Posn (list (box (numV 2)) (box (numV 7)))))
 
   (test (interp-posn (castE 'Posn posn531))
-        (objV 'Posn3D (list (numV 5) (numV 3) (numV 1)))))
+        (objV 'Posn3D (list (box (numV 5)) (box (numV 3)) (box (numV 1))))))
 ;;--------------------------------------------
 ; if0E test cases
 (module+ test
@@ -272,6 +300,15 @@
   (test/exn (interp-posn (getE (nullE) 'x))
             "not an object"))
 
+;;----------------------------------------------
+;; setE test cases 
+(module+ test
+  (test (interp-posn (setE posn27 'x (numE 0)))
+        (objV 'Posn (list (box (numV 0)) (box (numV 7)))))
+  (test/exn (interp-posn (setE posn27 'z (numE 0)))
+            "interp: field does not exist")
+  (test (interp-posn (setE posn531 'z (numE 8)))
+        (objV 'Posn3D (list (box (numV 5)) (box (numV 3)) (box (numV 8))))))
 ;;-----------------------------------------------
 (module+ test
   (test (interp (numE 10) 
@@ -285,13 +322,16 @@
         (numV 70))
 
   (test (interp-posn (newE 'Posn (list (numE 2) (numE 7))))
-        (objV 'Posn (list (numV 2) (numV 7))))
+        (objV 'Posn (list (box (numV 2)) (box (numV 7)))))
 
   (test (interp-posn (sendE posn27 'mdist (numE 0)))
         (numV 9))
   
   (test (interp-posn (sendE posn27 'addX (numE 10)))
         (numV 12))
+  ; multSetY test
+  (test (interp-posn (sendE posn27 'multSetY (numE 10)))
+        (numV 20))
 
   (test (interp-posn (sendE (ssendE posn27 'Posn 'factory12 (numE 0))
                             'multY
@@ -303,6 +343,9 @@
   
   (test/exn (interp-posn (plusE (numE 1) posn27))
             "not a number")
+  ; setE exception test
+  (test/exn (interp-posn (setE (numE 1) 'x (numE 27)))
+            "not an object")
   (test/exn (interp-posn (getE (numE 1) 'x))
             "not an object")
   (test/exn (interp-posn (sendE (numE 1) 'mdist (numE 0)))
