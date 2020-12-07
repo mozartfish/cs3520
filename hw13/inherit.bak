@@ -26,7 +26,8 @@
          [obj-expr : ExpI])
   (if0I [tst : ExpI]
         [thn : ExpI]
-        [els : ExpI]))
+        [els : ExpI])
+  (nullI))
 
 (define-type ClassI
   (classI [super-name : Symbol]
@@ -51,6 +52,8 @@
       ; if0I
       [(if0I tst thn els)
        (if0E (recur tst) (recur thn) (recur els))]
+      ; nullI
+      [(nullI) (nullE)]
       [(argI) (argE)]
       [(thisI) (thisE)]
       [(newI class-name field-exprs)
@@ -92,7 +95,10 @@
         (castE 'Posn (newE 'Posn (list (numE 2) (numE 7)))))
   ; test cases for if0I
   (test (exp-i->c (if0I (numI 0) (numI 5) (numI 7)) 'Object)
-        (if0E (numE 0) (numE 5) (numE 7))))
+        (if0E (numE 0) (numE 5) (numE 7)))
+  ; test cases for nullI
+  (test (exp-i->c (nullI) 'Object)
+        (nullE)))
   
 
 ;; ----------------------------------------

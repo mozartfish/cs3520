@@ -17,6 +17,9 @@
         [args : (Listof ExpI)])
   (getI [obj-expr : ExpI]
         [field-name : Symbol])
+  (setI [obj-expr : ExpI]
+        [field-name : Symbol]
+        [field-value : ExpI])
   (sendI [obj-expr : ExpI]
          [method-name : Symbol]
          [arg-expr : ExpI])
@@ -60,6 +63,8 @@
        (newE class-name (map recur field-exprs))]
       [(getI expr field-name)
        (getE (recur expr) field-name)]
+      [(setI expr field-name field-value)
+       (setE (recur expr) field-name (recur field-value))]
       [(sendI expr method-name arg-expr)
        (sendE (recur expr)
               method-name
@@ -85,6 +90,10 @@
         (newE 'Object (list (numE 1))))
   (test (exp-i->c (getI (numI 1) 'x) 'Object)
         (getE (numE 1) 'x))
+  ; test cases for setI
+  (test (exp-i->c (setI (newI 'Object (list (numI 1))) 'x (numI 5)) 'Object)
+        (setE (newE 'Object (list (numE 1))) 'x (numE 5)))
+  
   (test (exp-i->c (sendI (numI 1) 'mdist (numI 2)) 'Object)
         (sendE (numE 1) 'mdist (numE 2)))
   (test (exp-i->c (superI 'mdist (numI 2)) 'Posn)
