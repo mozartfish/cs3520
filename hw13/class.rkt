@@ -24,7 +24,10 @@
   (if0E [tst : Exp]
         [thn : Exp]
         [els : Exp])
-  (nullE))
+  (nullE)
+  (setE [obj-expr : Exp]
+        [field-name : Symbol]
+        [field-value : Value]))
   
   
 
@@ -36,8 +39,9 @@
 
 (define-type Value
   (numV [n : Number])
-  (objV [class-name : Symbol]
-        [field-values : (Listof Value)])
+  (boxV [b : (Boxof Value)])
+ (objV [class-name : Symbol]
+       [field-values : (Listof (Boxof Value))])
   (nullV))
 
 (module+ test
@@ -89,9 +93,19 @@
               [(classC super-name field-names methods)
                (find (map2 (lambda (n v) (values n v))
                            field-names
-                           field-vals)
+                           (map unbox field-vals))
                      field-name)])]
+                         
            [else (error 'interp "not an object")])]
+        ; setE interp
+        [(setE obj-expr field-name field-value)
+         (type-case Value (recur obj-expr)
+           [(objV class-name field-vals)
+            (type-case Class (find classes class-name)
+              [(classC super-name field-names methods)
+               ....])]
+           [ else (error 'interp "not an object")])]
+              
         ; castE interp
         [(castE class-name obj-expr)
          (local [(define obj (recur obj-expr))]
@@ -170,8 +184,23 @@
                                     (values 'B (classC 'A empty empty))))
         #t))
 
+; set-field helper function
+; each field value needs its own box for an object
+; list of boxes
+(define (set-field [field-vals : (Listof (Boxof Value))]
+                   [field-names : (Listof Symbol)]
+                   [field-name : Symbol]
+                   [field-val : Value])
+  ;; check the list of names to see if contains the field
+  (type-case (Listof Symbol) field-names
+    [empty (error 'interp "field does not exist")]
+    [(cons first-name rst-names)
+     (if (symbol=? first-name field-name)
+         (set-box! (first field-vals) field-val)
+         (set-field (rest field-vals) rst-names field-name field-val))]))
 
-;; ----------------------------------------
+
+   ;; ----------------------------------------
 ;; Examples
 
 (module+ test

@@ -334,7 +334,7 @@
   (test/exn (typecheck-posn (castI 'Square new-posn27))
             "no type")
   ;;-----------------------------------------------------------------------
-  ; least-upper-bound test-----------------------------------------------------------------------------
+   ; least-upper-bound test-----------------------------------------------------------------------------
   (test (least-upper-bound (objT 'Posn) (objT 'Posn3D)(list posn3D-t-class posn-t-class square-t-class))
         (objT 'Posn))
   (test (least-upper-bound (objT 'Posn) (objT 'Square)(list posn3D-t-class posn-t-class square-t-class))
@@ -347,6 +347,10 @@
             "Typecheck: type mismatch")
   (test (least-upper-bound (nullT) (nullT) (list posn3D-t-class posn-t-class square-t-class))
         (nullT))
+  (test (least-upper-bound (nullT) (objT 'Posn) (list posn3D-t-class posn-t-class square-t-class))
+        (nullT))
+  (test/exn (least-upper-bound (nullT) (numT) (list posn3D-t-class posn-t-class square-t-class))
+        "Typecheck: type mismatch")
   ;;---------------------------------------------------------------------------------------------------
 
   (test (typecheck-posn (sendI new-posn27 'mdist (numI 0)))
@@ -386,6 +390,13 @@
         (objT 'Posn))
   (test/exn (typecheck-posn (if0I (numI 0) new-posn27 (numI 1)))
             "Typecheck: type mismatch")
+  ;;----------------------------------------------------------------------------------
+  ;; nullI tests
+  (test (typecheck (nullI)
+                   empty)
+        (nullT))
+  (test/exn (typecheck-posn (sendI (numI 10) 'mdist (nullI)))
+            "no type")
   ;;----------------------------------------------------------------------------------
   
 

@@ -23,7 +23,8 @@
          [obj-expr : Exp])
   (if0E [tst : Exp]
         [thn : Exp]
-        [els : Exp]))
+        [els : Exp])
+  (nullE))
   
   
 
@@ -36,7 +37,8 @@
 (define-type Value
   (numV [n : Number])
   (objV [class-name : Symbol]
-        [field-values : (Listof Value)]))
+        [field-values : (Listof Value)])
+  (nullV))
 
 (module+ test
   (print-only-errors #t))
@@ -106,6 +108,7 @@
                          (recur thn)
                          (recur els))]
            [else (error 'interp "not a number")])]
+        [(nullE) (nullV)]
          
         [(sendE obj-expr method-name arg-expr)
          (local [(define obj (recur obj-expr))
@@ -228,6 +231,19 @@
             "not a number"))
                     
 ;; -------------------------------------------
+
+;; null E test cases
+(module+ test
+  (test/exn (interp (plusE (nullE) (numE 17))
+                empty (objV 'Object empty) (numV 0))
+            "interp: not a number")
+  (test/exn
+   (interp-posn (sendE posn27 'addX (nullE)))
+   "interp: not a number")
+  (test/exn (interp-posn (getE (nullE) 'x))
+            "not an object"))
+
+;;-----------------------------------------------
 (module+ test
   (test (interp (numE 10) 
                 empty (objV 'Object empty) (numV 0))
