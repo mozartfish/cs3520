@@ -383,6 +383,18 @@
   (define new-posn27 (newI 'Posn (list (numI 2) (numI 7))))
   (define new-posn531 (newI 'Posn3D (list (numI 5) (numI 3) (numI 1))))
 
+  ;; letI typecheck---------------------------------------------------
+    (test (typecheck (letEI 'x (numT) (numI 3)
+                            (plusI (numI 2) (idEI 'x)))
+                     empty)
+          (numT))
+  (test/exn (typecheck (letEI 'x (numT) (newI 'Object empty)
+                              (plusI (numI 2) (idEI 'x)))
+                       empty)
+            "no type")
+
+  ;;------------------------------------------------------------------
+
   ; castI typecheck-----------------------------------------------------
   (test (typecheck-posn (castI 'Posn new-posn531))
         (objT 'Posn))
