@@ -1,6 +1,7 @@
 #lang plait
 (require "class.rkt"
-         "inherit.rkt")
+         "inherit.rkt"
+         "typed-class.rkt")
 
 (module+ test
   (print-only-errors #t))
@@ -51,6 +52,16 @@
    [(s-exp-match? `{get ANY SYMBOL} s)
     (getI (parse (second (s-exp->list s)))
           (s-exp->symbol (third (s-exp->list s))))]
+   ; let
+   ; let x: num 5
+   [(s-exp-match? `{let {[SYMBOL : ANY ANY]} ANY} s)
+    (let ([bs (s-exp->list (first
+                            (s-exp->list (second
+                                          (s-exp->list s)))))])
+      (letEI (s-exp->symbol (first bs))
+             (parse-type (third bs))
+             (parse (fourth bs))
+        (parse (third (s-exp->list s)))))]
    ; setI parse
    [(s-exp-match? `{set ANY SYMBOL ANY} s)
     (setI (parse (second (s-exp->list s)))

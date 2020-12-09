@@ -2,6 +2,10 @@
 
 (define-type Exp
   (numE [n : Number])
+  (idE [s : Symbol])
+  (letE [name : Symbol]
+        [rhs : Exp]
+        [body : Exp])
   (plusE [lhs : Exp]
          [rhs : Exp])
   (multE [lhs : Exp]
@@ -30,8 +34,6 @@
         [els : Exp])
   (nullE))
   
-  
-
 (define-type Class
   (classC
    [super-name : Symbol]
@@ -44,6 +46,15 @@
         [field-values : (Listof (Boxof Value))])
   (nullV))
 
+; implementation for let
+(define-type Binding
+  (bind [name : Symbol]
+        [val : Value]))
+
+(define-type-alias Env (Listof Binding))
+
+(define mt-env empty)
+(define extend-env cons)
 
 (module+ test
   (print-only-errors #t))
@@ -71,14 +82,27 @@
 
 ;; ----------------------------------------
 
-(define interp : (Exp (Listof (Symbol * Class)) Value Value -> Value)
-  (lambda (a classes this-val arg-val)
+(define interp : (Exp (Listof (Symbol * Class)) Value Value Env -> Value)
+  (lambda (a classes this-val arg-val env)
     (local [(define (recur expr)
-              (interp expr classes this-val arg-val))]
+              (interp expr classes this-val arg-val env))]
       (type-case Exp a
         [(numE n) (numV n)]
         [(plusE l r) (num+ (recur l) (recur r))]
         [(multE l r) (num* (recur l) (recur r))]
+        ; idE
+        [(idE s) (lookup s env)]
+        ;;(let ([x : num 5]) (+ 5 x))
+        ;; the let case
+        [(letE name rhs body)
+         (let ([x (recur rhs)])
+           (interp body
+                   classes
+                   this-val
+                   arg-val
+                   (extend-env
+                    (bind name x)
+                    env)))]
         [(thisE) this-val]
         [(argE) arg-val]
         [(newE class-name field-exprs)
@@ -148,7 +172,7 @@
        (interp body-expr
                classes
                obj
-               arg-val))]))
+               arg-val mt-env))]))
 
 (define (num-op [op : (Number Number -> Number)]
                 [op-name : Symbol] 
@@ -224,8 +248,33 @@
          (set-field field-names field-values 'z (numV 10))
          (unbox (third field-values)))))
    (numV 10)))
-  
 
+;; lookup ----------------------------------------
+(define (make-lookup [name-of : ('a -> Symbol)] [val-of : ('a -> 'b)])
+  (lambda ([name : Symbol] [vals : (Listof 'a)]) : 'b
+          (cond
+            [(empty? vals)
+             (error 'find "free variable")]
+            [else (if (equal? name (name-of (first vals)))
+                      (val-of (first vals))
+                      ((make-lookup name-of val-of) name (rest vals)))])))
+
+(define lookup
+  (make-lookup bind-name bind-val))
+
+(module+ test
+  (test/exn (lookup 'x mt-env)
+            "free variable")
+  (test (lookup 'x (extend-env (bind 'x (numV 8)) mt-env))
+        (numV 8))
+  (test (lookup 'x (extend-env
+                    (bind 'x (numV 9))
+                    (extend-env (bind 'x (numV 8)) mt-env)))
+        (numV 9))
+  (test (lookup 'y (extend-env
+                    (bind 'x (numV 9))
+                    (extend-env (bind 'y (numV 8)) mt-env)))
+        (numV 8)))
   ;; ----------------------------------------
 ;; Examples
 
@@ -260,7 +309,7 @@
   (define posn531 (newE 'Posn3D (list (numE 5) (numE 3) (numE 1))))
 
   (define (interp-posn a)
-    (interp a (list posn-class posn3D-class) (numV -1) (numV -1))))
+    (interp a (list posn-class posn3D-class) (numV -1) (numV -1) mt-env)))
 
 ;; ----------------------------------------
 ; castE test cases
@@ -278,10 +327,10 @@
 ; if0E test cases
 (module+ test
   (test (interp (if0E (numE 1) (numE 3) (numE 5))
-                empty (objV 'Object empty) (numV 0))
+                empty (objV 'Object empty) (numV 0) mt-env)
         (numV 5))
   (test (interp (if0E (numE 0) (numE 3) (numE 5))
-                empty (objV 'Object empty) (numV 0))
+                empty (objV 'Object empty) (numV 0) mt-env)
         (numV 3))
   (test/exn (interp-posn (if0E (castE 'Object (newE 'Posn (list (numE 2) (numE 7))))
                                (numE 1) (numE 5)))
@@ -292,14 +341,13 @@
 ;; null E test cases
 (module+ test
   (test/exn (interp (plusE (nullE) (numE 17))
-                empty (objV 'Object empty) (numV 0))
+                empty (objV 'Object empty) (numV 0) mt-env)
             "interp: not a number")
   (test/exn
    (interp-posn (sendE posn27 'addX (nullE)))
    "interp: not a number")
   (test/exn (interp-posn (getE (nullE) 'x))
             "not an object"))
-
 ;;----------------------------------------------
 ;; setE test cases 
 (module+ test
@@ -312,13 +360,13 @@
 ;;-----------------------------------------------
 (module+ test
   (test (interp (numE 10) 
-                empty (objV 'Object empty) (numV 0))
+                empty (objV 'Object empty) (numV 0) mt-env)
         (numV 10))
   (test (interp (plusE (numE 10) (numE 17))
-                empty (objV 'Object empty) (numV 0))
+                empty (objV 'Object empty) (numV 0) mt-env)
         (numV 27))
   (test (interp (multE (numE 10) (numE 7))
-                empty (objV 'Object empty) (numV 0))
+                empty (objV 'Object empty) (numV 0) mt-env)
         (numV 70))
 
   (test (interp-posn (newE 'Posn (list (numE 2) (numE 7))))

@@ -12,6 +12,11 @@
   (multI [lhs : ExpI]
          [rhs : ExpI])
   (argI)
+  (idEI [name : Symbol])
+  (letEI [name : Symbol]
+         [type : Type]
+         [rhs : ExpI]
+         [body : ExpI])
   (thisI)
   (newI [class-name : Symbol]
         [args : (Listof ExpI)])
@@ -37,6 +42,12 @@
           [field-names : (Listof Symbol)]
           [methods : (Listof (Symbol * ExpI))]))
 
+(define-type Type
+  (numT)
+  (objT [class-name : Symbol])
+  (nullT))
+
+
 (module+ test
   (print-only-errors #t))
 
@@ -49,6 +60,9 @@
       [(numI n) (numE n)]
       [(plusI l r) (plusE (recur l) (recur r))]
       [(multI l r) (multE (recur l) (recur r))]
+      ; letEI
+      [(letEI name type rhs body) (letE name (recur rhs) (recur body))]
+      [(idEI name) (idE name)]
       ; castI
       [(castI class-name obj-expr)
        (castE class-name (recur obj-expr))]
@@ -79,6 +93,15 @@
 (module+ test
   (test (exp-i->c (numI 10) 'Object)
         (numE 10))
+  ; test cases for idEI
+  (test (exp-i->c (idEI 'x) 'Object)
+        (idE 'x))
+  ; test cases for letI----------------------------------------------------------
+  (test (exp-i->c (letEI 'x (numT) (numI 10) (plusI (numI 10) (idEI 'x))) 'Object)
+        (letE 'x (numE 10) (plusE (numE 10) (idE 'x))))
+(test (exp-i->c (letEI 'x (objT 'Posn) (numI 10) (plusI (numI 10) (idEI 'x))) 'Object)
+        (letE 'x (numE 10) (plusE (numE 10) (idE 'x))))
+  ;;---------------------------------------------------------------------------------
   (test (exp-i->c (plusI (numI 10) (numI 2)) 'Object)
         (plusE (numE 10) (numE 2)))
   (test (exp-i->c (multI (numI 10) (numI 2)) 'Object)
@@ -89,6 +112,7 @@
         (thisE))
   (test (exp-i->c (newI 'Object (list (numI 1))) 'Object)
         (newE 'Object (list (numE 1))))
+
   (test (exp-i->c (getI (numI 1) 'x) 'Object)
         (getE (numE 1) 'x))
   ; test cases for setI
@@ -289,7 +313,7 @@
                      (values name
                              (flatten-class name classes-not-flat i-classes))))
                  classes-not-flat))]
-    (interp a classes (objV 'Object empty) (numV 0))))
+    (interp a classes (objV 'Object empty) (numV 0) mt-env)))
 
 (module+ test
   (test (interp-i (numI 0) empty)

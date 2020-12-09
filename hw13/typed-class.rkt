@@ -13,10 +13,15 @@
            [result-type : Type]
            [body-expr : ExpI]))
 
-(define-type Type
-  (numT)
-  (objT [class-name : Symbol])
-  (nullT))
+
+
+; typechecking for env
+(define-type Type-Binding
+  (tbind [name : Symbol]
+         [type : Type]))
+
+(define-type-alias Type-Env (Listof Type-Binding))
+
 
 (module+ test
   (print-only-errors #t))
@@ -107,10 +112,10 @@
 
 ;; ----------------------------------------
 
-(define typecheck-expr : (ExpI (Listof (Symbol * ClassT)) Type Type -> Type)
-  (lambda (expr t-classes this-type arg-type)
+(define typecheck-expr : (ExpI (Listof (Symbol * ClassT)) Type Type Type-Env -> Type)
+  (lambda (expr t-classes this-type arg-type tenv)
     (local [(define (recur expr)
-              (typecheck-expr expr t-classes this-type arg-type))
+              (typecheck-expr expr t-classes this-type arg-type tenv))
             (define (typecheck-nums l r)
               (type-case Type (recur l)
                 [(numT)
@@ -123,6 +128,20 @@
         [(plusI l r) (typecheck-nums l r)]
         [(multI l r) (typecheck-nums l r)]
         [(argI) arg-type]
+        [(idEI n) (type-lookup n tenv)]
+        [(letEI n t rhs body)
+         (local [(define rhs-type (recur rhs))]
+           (if (is-subtype? t rhs-type t-classes)
+               (typecheck-expr body
+                               t-classes
+                               this-type
+                               arg-type
+                               (extend-env
+                                (tbind n rhs-type)
+                                tenv))
+               (type-error rhs "type")))]
+                   
+         
         [(thisI) this-type]
         [(newI class-name exprs)
          (local [(define arg-types (map recur exprs))
@@ -223,6 +242,9 @@
          result-type
          (type-error arg-expr (to-string arg-type-m)))]))
 
+; type look up helper function
+(define type-lookup
+  (make-lookup tbind-name tbind-type))
 ; least upper bound helper function
 (define (least-upper-bound [t1 : Type]
                            [t2 : Type]
@@ -255,7 +277,7 @@
   (type-case MethodT method
     [(methodT arg-type result-type body-expr)
      (if (is-subtype? (typecheck-expr body-expr t-classes
-                                      this-type arg-type)
+                                      this-type arg-type mt-env)
                       result-type
                       t-classes)
          (values)
@@ -322,7 +344,7 @@
     (map (lambda (tc)
            (typecheck-class (fst tc) (snd tc) t-classes))
          t-classes)
-    (typecheck-expr a t-classes (objT 'Object) (numT))))
+    (typecheck-expr a t-classes (objT 'Object) (numT) mt-env)))
 
 ;; ----------------------------------------
 
