@@ -1,12 +1,28 @@
 #lang plait
 (require "class.rkt"
-         "inherit.rkt"
-         "typed-class.rkt")
+         "inherit.rkt")
 
 (module+ test
   (print-only-errors #t))
 
 ;; ----------------------------------------
+
+;; parse-type function
+(define (parse-type [s : S-Exp]) : Type
+  (cond
+    [(s-exp-match? `num s)
+     (numT)]
+    [(s-exp-match? `SYMBOL s)
+     (objT (s-exp->symbol s))]
+    [else (error 'parse-type "invalid input")]))
+
+(module+ test
+  (test (parse-type `num)
+        (numT))
+  (test (parse-type `Object)
+        (objT 'Object))
+  (test/exn (parse-type `{})
+            "invalid input"))
 
 (define (parse-class [s : S-Exp]) : (Symbol * ClassI)
   (cond
@@ -35,12 +51,13 @@
 
 (define (parse [s : S-Exp]) : ExpI
   (cond
-   [(s-exp-match? `NUMBER s) (numI (s-exp->number s))]
-   [(s-exp-match? `null s)
-    (nullI)]
-   [(s-exp-match? `arg s) (argI)]
-   [(s-exp-match? `this s) (thisI)]
-   [(s-exp-match? `{+ ANY ANY} s)
+    [(s-exp-match? `NUMBER s) (numI (s-exp->number s))]
+    [(s-exp-match? `null s)
+     (nullI)]
+    [(s-exp-match? `arg s) (argI)]
+    [(s-exp-match? `this s) (thisI)]
+    [(s-exp-match? `SYMBOL s) (idEI (s-exp->symbol s))]
+    [(s-exp-match? `{+ ANY ANY} s)
     (plusI (parse (second (s-exp->list s)))
            (parse (third (s-exp->list s))))]
    [(s-exp-match? `{* ANY ANY} s)
@@ -84,6 +101,7 @@
     (superI (s-exp->symbol (second (s-exp->list s)))
             (parse (third (s-exp->list s))))]
    [else (error 'parse "invalid input")]))
+   ;;[else (error 'parse (string-append "invalid input: " (to-string s)))]))
 
 (module+ test
   (test (parse `0)
@@ -100,6 +118,11 @@
         (multI (numI 1) (numI 2)))
   (test (parse `{new Posn 1 2})
         (newI 'Posn (list (numI 1) (numI 2))))
+  ; letI test parse
+  (test (parse `{let {[x : num {+ 1 2}]}
+                  y})
+        (letEI 'x (numT) (plusI (numI 1) (numI 2))
+               (idEI 'y)))
   ; castI test case
   (test (parse `{cast Posn {new Posn 1 2}})
         (castI 'Posn (newI 'Posn (list (numI 1) (numI 2)))))
@@ -121,7 +144,10 @@
         (sendI (numI 1) 'm (numI 2)))
   (test (parse `{super m 1})
         (superI 'm (numI 1)))
-  (test/exn (parse `x)
+  (test (parse `x)
+        (idEI 'x))
+  ; parse error
+  (test/exn (parse `{getRekt {+ 1 2}})
             "invalid input")
 
   (test (parse-field `x)
