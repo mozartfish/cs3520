@@ -349,6 +349,16 @@
   (test/exn (interp-posn (getE (nullE) 'x))
             "not an object"))
 ;;----------------------------------------------
+
+;; letE test cases-----------------------------------------
+(module+ test
+  (test (interp (letE 'x (numE 5) (plusE (numE 5) (idE 'x)))
+                empty (objV 'Object empty) (numV 0) mt-env)
+        (numV 10))
+    (test/exn (interp (letE 'x (numE 5) (plusE (numE 5) (idE 'y)))
+                empty (objV 'Object empty) (numV 0) mt-env)
+       "find: free variable"))
+;; -----------------------------------------------------------
 ;; setE test cases 
 (module+ test
   (test (interp-posn (setE posn27 'x (numE 0)))
