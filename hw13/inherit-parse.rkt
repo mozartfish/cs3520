@@ -35,6 +35,8 @@
 (define (parse [s : S-Exp]) : ExpI
   (cond
    [(s-exp-match? `NUMBER s) (numI (s-exp->number s))]
+   [(s-exp-match? `null s)
+    (nullI)]
    [(s-exp-match? `arg s) (argI)]
    [(s-exp-match? `this s) (thisI)]
    [(s-exp-match? `{+ ANY ANY} s)
@@ -63,9 +65,6 @@
     (if0I (parse (second (s-exp->list s)))
           (parse (third (s-exp->list s)))
           (parse (fourth (s-exp->list s))))]
-   ; nullI parse
-   [(s-exp-match? `{null} s)
-    (nullI)]
    [(s-exp-match? `{send ANY SYMBOL ANY} s)
     (sendI (parse (second (s-exp->list s)))
            (s-exp->symbol (third (s-exp->list s)))
@@ -84,6 +83,8 @@
         (thisI))
   (test (parse `{+ 1 2})
         (plusI (numI 1) (numI 2)))
+    (test (parse `{+ 1 null})
+        (plusI (numI 1) (nullI)))
   (test (parse `{* 1 2})
         (multI (numI 1) (numI 2)))
   (test (parse `{new Posn 1 2})
@@ -95,7 +96,7 @@
   (test (parse `{if0 1 3 5})
         (if0I (numI 1) (numI 3) (numI 5)))
   ; nullI test case
-  (test (parse `{null})
+  (test (parse `null)
         (nullI))
   ; castI test case
   (test (parse `{cast Posn3D {new Posn3D 1 2 3}})

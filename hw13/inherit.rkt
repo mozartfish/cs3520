@@ -63,6 +63,7 @@
        (newE class-name (map recur field-exprs))]
       [(getI expr field-name)
        (getE (recur expr) field-name)]
+      ; setI
       [(setI expr field-name field-value)
        (setE (recur expr) field-name (recur field-value))]
       [(sendI expr method-name arg-expr)

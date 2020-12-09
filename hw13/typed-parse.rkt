@@ -86,7 +86,8 @@
                      (map parse-t-class classes))])
     (type-case Value v
       [(numV n) (number->s-exp n)]
-      [(objV class-name field-vals) `object])))
+      [(objV class-name field-vals) `object]
+      [(nullV) `null])))
 
 (module+ test
   (test (interp-t-prog
@@ -114,4 +115,51 @@
                       {super mdist arg}}]})
         
         `{send {new Posn3D 5 3 1} addDist {new Posn 2 7}})
-       `18))
+       `18)
+
+  ; test get
+ (test (interp-t-prog 
+        (list
+         `{class Posn extends Object
+            {[x : num]
+             [y : num]}
+            [mdist {[arg : num]} : num
+                   {+ {get this x} {get this y}}]
+            [addDist {[arg : Posn]} : num
+                     {+ {send arg mdist 0}
+                        {send this mdist 0}}]}
+         
+         `{class Posn3D extends Posn
+            {[z : num]}
+            [mdist {[arg : num]} : num
+                   {+ {get this z} 
+                      {super mdist arg}}]})
+        
+        `{get {new Posn3D 5 3 1} x})
+       `5)
+
+  ; test set
+ (test (interp-t-prog 
+        (list
+         `{class Posn extends Object
+            {[x : num]
+             [y : num]}
+            [mdist {[arg : num]} : num
+                   {+ {get this x} {get this y}}]
+            [addDist {[arg : Posn]} : num
+                     {+ {send arg mdist 0}
+                        {send this mdist 0}}]}
+         
+         `{class Posn3D extends Posn
+            {[z : num]}
+            [mdist {[arg : num]} : num
+                   {+ {get this z} 
+                      {super mdist arg}}]})
+        
+        `{get {set {new Posn3D 5 3 1} x 10} x})
+       `10)
+  ; null
+(test/exn (interp-t-prog
+           empty
+           `{+ null 1})
+          "interp: not a number"))
