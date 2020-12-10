@@ -107,6 +107,9 @@
   ; test cases for idEI
   (test (exp-i->c (idEI 'x) 'Object)
         (idE 'x))
+  ; test cases for newArrayEI
+  (test (exp-i->c (newArrayI (numT) (numI 0) (numI 5)) 'Object)
+        (newArrayE (numE 0) (numE 5)))
   ; test cases for letI----------------------------------------------------------
   (test (exp-i->c (letEI 'x (numT) (numI 10) (plusI (numI 10) (idEI 'x))) 'Object)
         (letE 'x (numE 10) (plusE (numE 10) (idE 'x))))
