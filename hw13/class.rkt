@@ -127,11 +127,15 @@
            [(objV class-name field-vals)
             (type-case Class (find classes class-name)
               [(classC super-name field-names methods)
-               ;; need a helper function of some sorts to set the field value
                (begin
-                 (set-field field-names field-vals field-name (recur new-field-value))
-                 (objV class-name field-vals))])]
+                 (set-box!
+                  (find (map2 (lambda (n v) (values n v))
+                              field-names
+                              field-vals)
+                        field-name) (recur new-field-value))
+                 (numV 0))])]
            [else (error 'interp "not an object")])]
+        
         ; castE interp
         [(castE class-name obj-expr)
          (local [(define obj (recur obj-expr))]
@@ -209,46 +213,6 @@
   (test (subclass? 'B 'Object (list (values 'A (classC 'Object empty empty))
                                     (values 'B (classC 'A empty empty))))
         #t))
-
-; set-field helper function
-; need a function that takes a list of field names
-; list of field values that find a field and updates its corrsponding value
-(define (set-field [field-names : (Listof Symbol)]
-                   [field-values : (Listof (Boxof Value))]
-                   [field-name : Symbol]
-                   [new-field-value : Value])
-  ;; check if the list of field names is empty
-  (type-case (Listof Symbol) field-names
-    [empty (error 'interp "field does not exist")]
-    [(cons first-name rst-names)
-     (if (symbol=? first-name field-name)
-         (set-box! (first field-values) new-field-value)
-         (set-field rst-names (rest field-values) field-name new-field-value))]))
-
-;; test cases
-(module+ test
-  (test
-   (let ([field-names (list 'x 'y 'z)])
-     (let ([field-values (list (box (numV 1)) (box (numV 2)) (box (numV 3)))])
-       (begin
-         (set-field field-names field-values 'x (numV 5))
-         (unbox (first field-values)))))
-   (numV 5))
-
-  (test/exn
-   (let ([field-names (list 'x 'y)])
-     (let ([field-values (list (box (numV 1)) (box (numV 2)) (box (numV 3)))])
-         (set-field field-names field-values 'z (numV 5))))
-   "interp: field does not exist")
-
-  (test
-   (let ([field-names (list 'x 'y 'z)])
-     (let ([field-values (list (box (numV 1)) (box (numV 2)) (box (numV 3)))])
-       (begin
-         (set-field field-names field-values 'z (numV 10))
-         (unbox (third field-values)))))
-   (numV 10)))
-
 ;; lookup ----------------------------------------
 (define (make-lookup [name-of : ('a -> Symbol)] [val-of : ('a -> 'b)])
   (lambda ([name : Symbol] [vals : (Listof 'a)]) : 'b
@@ -291,10 +255,10 @@
                                   (sendE (argE) 'mdist (numE 0))))
                    (values 'addX
                            (plusE (getE (thisE) 'x) (argE)))
+                   (values 'setAddX
+                           (plusE (getE (setE (thisE) 'x (numE 10)) 'x) (argE)))
                    (values 'multY (multE (argE) (getE (thisE) 'y)))
-                   (values 'factory12 (newE 'Posn (list (numE 1) (numE 2))))
-                   (values 'multSetY
-                           (multE (argE) (getE (setE (thisE) 'y (numE 2)) 'y)))))))
+                   (values 'factory12 (newE 'Posn (list (numE 1) (numE 2))))))))
     
   (define posn3D-class
     (values 'Posn3D
@@ -362,11 +326,11 @@
 ;; setE test cases 
 (module+ test
   (test (interp-posn (setE posn27 'x (numE 0)))
-        (objV 'Posn (list (box (numV 0)) (box (numV 7)))))
+        (numV 0))
   (test/exn (interp-posn (setE posn27 'z (numE 0)))
-            "interp: field does not exist")
+            "find: not found: z")
   (test (interp-posn (setE posn531 'z (numE 8)))
-        (objV 'Posn3D (list (box (numV 5)) (box (numV 3)) (box (numV 8))))))
+        (numV 0)))
 ;;-----------------------------------------------
 (module+ test
   (test (interp (numE 10) 
@@ -387,10 +351,6 @@
   
   (test (interp-posn (sendE posn27 'addX (numE 10)))
         (numV 12))
-  ; multSetY test
-  (test (interp-posn (sendE posn27 'multSetY (numE 10)))
-        (numV 20))
-
   (test (interp-posn (sendE (ssendE posn27 'Posn 'factory12 (numE 0))
                             'multY
                             (numE 15)))

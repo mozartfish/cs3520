@@ -19,14 +19,16 @@
                    (s-exp->list (fourth (rest (s-exp->list s)))))
               (map parse-t-method 
                    (rest (rest (rest (rest (rest (s-exp->list s)))))))))]
-    [else (error 'parse-t-class "invalid input")]))
+    [else (error 'parse-t-class (string-append "invalid input: " (to-string s)))]))
+;[else (error 'parse-t-class "invalid input")]))
 
 (define (parse-t-field [s : S-Exp]) : (Symbol * Type)
   (cond
     [(s-exp-match? `[SYMBOL : ANY] s)
      (values (s-exp->symbol (first (s-exp->list s)))
              (parse-type (third (s-exp->list s))))]
-    [else (error 'parse-t-field "invalid input")]))
+    [else (error 'parse-t-field (string-append "invalid input: " (to-string s)))]))
+;;[else (error 'parse-t-field "invalid input")]))
 
 (define (parse-t-method [s : S-Exp]) : (Symbol * MethodT)
   (cond
@@ -38,7 +40,8 @@
                              (third (s-exp->list arg))))
                (parse-type (fourth (s-exp->list s)))
                (parse (fourth (rest (s-exp->list s))))))]
-    [else (error 'parse-t-method "invalid input")]))
+    [else (error 'parse-t-method (string-append "invalid input: " (to-string s)))]))
+;;[else (error 'parse-t-method "invalid input")]))
 
 
 
@@ -76,12 +79,17 @@
 ;; ----------------------------------------
 
 (define (interp-t-prog [classes : (Listof S-Exp)] [a : S-Exp]) : S-Exp
+  (begin
+    (typecheck
+     (parse a) (map parse-t-class classes))
   (let ([v (interp-t (parse a)
                      (map parse-t-class classes))])
     (type-case Value v
       [(numV n) (number->s-exp n)]
       [(objV class-name field-vals) `object]
-      [(nullV) `null])))
+      [(nullV) `null]))))
+
+
 
 (module+ test
   (test (interp-t-prog
@@ -91,69 +99,115 @@
          `{new Empty})
         `object)
 
- (test (interp-t-prog 
-        (list
-         `{class Posn extends Object
-            {[x : num]
-             [y : num]}
-            [mdist {[arg : num]} : num
-                   {+ {get this x} {get this y}}]
-            [addDist {[arg : Posn]} : num
-                     {+ {send arg mdist 0}
-                        {send this mdist 0}}]}
+  (test (interp-t-prog 
+         (list
+          `{class Posn extends Object
+             {[x : num]
+              [y : num]}
+             [mdist {[arg : num]} : num
+                    {+ {get this x} {get this y}}]
+             [addDist {[arg : Posn]} : num
+                      {+ {send arg mdist 0}
+                         {send this mdist 0}}]}
          
-         `{class Posn3D extends Posn
-            {[z : num]}
-            [mdist {[arg : num]} : num
-                   {+ {get this z} 
-                      {super mdist arg}}]})
+          `{class Posn3D extends Posn
+             {[z : num]}
+             [mdist {[arg : num]} : num
+                    {+ {get this z} 
+                       {super mdist arg}}]})
         
-        `{send {new Posn3D 5 3 1} addDist {new Posn 2 7}})
-       `18)
+         `{send {new Posn3D 5 3 1} addDist {new Posn 2 7}})
+        `18)
 
   ; test get
- (test (interp-t-prog 
-        (list
-         `{class Posn extends Object
-            {[x : num]
-             [y : num]}
-            [mdist {[arg : num]} : num
-                   {+ {get this x} {get this y}}]
-            [addDist {[arg : Posn]} : num
-                     {+ {send arg mdist 0}
-                        {send this mdist 0}}]}
+  (test (interp-t-prog 
+         (list
+          `{class Posn extends Object
+             {[x : num]
+              [y : num]}
+             [mdist {[arg : num]} : num
+                    {+ {get this x} {get this y}}]
+             [addDist {[arg : Posn]} : num
+                      {+ {send arg mdist 0}
+                         {send this mdist 0}}]}
          
-         `{class Posn3D extends Posn
-            {[z : num]}
-            [mdist {[arg : num]} : num
-                   {+ {get this z} 
-                      {super mdist arg}}]})
+          `{class Posn3D extends Posn
+             {[z : num]}
+             [mdist {[arg : num]} : num
+                    {+ {get this z} 
+                       {super mdist arg}}]})
         
-        `{get {new Posn3D 5 3 1} x})
-       `5)
+         `{get {new Posn3D 5 3 1} x})
+        `5)
 
-  ; test set
- (test (interp-t-prog 
-        (list
-         `{class Posn extends Object
-            {[x : num]
-             [y : num]}
-            [mdist {[arg : num]} : num
-                   {+ {get this x} {get this y}}]
-            [addDist {[arg : Posn]} : num
-                     {+ {send arg mdist 0}
-                        {send this mdist 0}}]}
+  ;; test let with Posn
+  (test (interp-t-prog 
+         (list
+          `{class Posn extends Object
+             {[x : num]
+              [y : num]}
+             [mdist {[arg : num]} : num
+                    {+ {get this x} {get this y}}]
+             [addDist {[arg : Posn]} : num
+                      {+ {send arg mdist 0}
+                         {send this mdist 0}}]}
          
-         `{class Posn3D extends Posn
-            {[z : num]}
-            [mdist {[arg : num]} : num
-                   {+ {get this z} 
-                      {super mdist arg}}]})
-        
-        `{get {set {new Posn3D 5 3 1} x 10} x})
-       `10)
+          `{class Posn3D extends Posn
+             {[z : num]}
+             [mdist {[arg : num]} : num
+                    {+ {get this z} 
+                       {super mdist arg}}]})
+         `{let {[barB : Posn3D {new Posn3D 1 2 3}]}
+            {get barB x}})
+        `1)
+  ;; test let with numbers
+  (test (interp-t-prog 
+         (list
+          `{class Posn extends Object
+             {[x : num]
+              [y : num]}
+             [mdist {[arg : num]} : num
+                    {+ {get this x} {get this y}}]
+             [addDist {[arg : Posn]} : num
+                      {+ {send arg mdist 0}
+                         {send this mdist 0}}]}
+         
+          `{class Posn3D extends Posn
+             {[z : num]}
+             [mdist {[arg : num]} : num
+                    {+ {get this z} 
+                       {super mdist arg}}]})
+         `{let {[barB : num 1]}
+            {+ 1 barB}})
+        `2)
+
+  ; set with let (test imperative)
+    (test (interp-t-prog 
+         (list
+          `{class Posn extends Object
+             {[x : num]
+              [y : num]}
+             [mdist {[arg : num]} : num
+                    {+ {get this x} {get this y}}]
+             [addDist {[arg : Posn]} : num
+                      {+ {send arg mdist 0}
+                         {send this mdist 0}}]}
+         
+          `{class Posn3D extends Posn
+             {[z : num]}
+             [mdist {[arg : num]} : num
+                    {+ {get this z} 
+                       {super mdist arg}}]})
+         `{let {[foo : Posn {new Posn 2 7}]}
+           {let {[foox : num {set foo x 3}]}
+             {get foo x}}})
+          `3)
+
+  
+
+  ;;------------------------------------------------------------------------------
   ; null
-(test/exn (interp-t-prog
-           empty
-           `{+ null 1})
-          "interp: not a number"))
+  (test/exn (interp-t-prog
+             empty
+             `{+ null 1})
+            "typecheck: no type: (nullI) not num"))

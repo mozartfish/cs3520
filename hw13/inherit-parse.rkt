@@ -100,8 +100,8 @@
    [(s-exp-match? `{super SYMBOL ANY} s)
     (superI (s-exp->symbol (second (s-exp->list s)))
             (parse (third (s-exp->list s))))]
-   [else (error 'parse "invalid input")]))
-   ;;[else (error 'parse (string-append "invalid input: " (to-string s)))]))
+   ;;[else (error 'parse "invalid input")]))
+   [else (error 'parse (string-append "invalid input: " (to-string s)))]))
 
 (module+ test
   (test (parse `0)

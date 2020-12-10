@@ -139,7 +139,8 @@
                                (extend-env
                                 (tbind n rhs-type)
                                 tenv))
-               (type-error rhs "type")))]
+             (type-error rhs (string-append "type" (to-string t)))))]
+               ;;(type-error rhs "type")))]
                    
          
         [(thisI) this-type]
@@ -169,18 +170,15 @@
                  (define field-val-expr-type (recur field-value-expr))]
            (type-case Type obj-expr-type
              [(objT obj-expr-class-name)
-              ; need a helper function of some sorts
-              ; to check that the new value type
-              ; matches the type of the field
-              (begin
-                (set-field-typecheck
-                 (classT-fields (find t-classes obj-expr-class-name))
-                 field-name
-                 field-value-expr
-                 field-val-expr-type
-                 t-classes)
-                (objT obj-expr-class-name))]
-             [else (type-error obj-expr "object")]))]
+              (local [(define field-type (find-field-in-tree
+                                          field-name
+                                          obj-expr-class-name
+                                          t-classes))]
+                (if (is-subtype? field-type field-val-expr-type t-classes)
+                    (numT)
+                    (type-error field-value-expr "field type mismatch")))]
+             
+             [else (type-error obj-expr "object")]))]          
         ; castI
         [(castI class-name obj-expr)
          (local [(define obj-expr-type (recur obj-expr))]
@@ -283,25 +281,7 @@
          (values)
          (type-error body-expr (to-string result-type)))]))
 
-; set check helper function
-(define (set-field-typecheck [fields : (Listof (Symbol * Type))]
-                             [field-name : Symbol]
-                             [new-field-expr : ExpI]
-                             [new-field-type : Type]
-                            [t-classes : (Listof (Symbol * ClassT))])
-  (type-case (Listof (Symbol * Type)) fields
-    ; check if the fields are empty
-    [empty (type-error fields "field")]
-    [(cons first-field rest-fields)
-     ; check if the field names match
-     ; fields are tuples -> (name, type)
-     (if (symbol=? (fst first-field) field-name)
-         ; check the type
-         (if (is-subtype? new-field-type (snd first-field) t-classes)
-             (values)
-             (type-error new-field-expr "type"))
-         (set-field-typecheck rest-fields field-name new-field-expr
-                              new-field-type t-classes))]))
+
   
 
 (define (check-override [method-name : Symbol]
@@ -404,20 +384,7 @@
             "no type")
   (test/exn (typecheck-posn (castI 'Square new-posn27))
             "no type")
-  ;;-----------------------------------------------------------------------
-  ; set-check-type test
-  (test (set-field-typecheck (list (values 'x (numT)) (values 'y (numT)))
-                             'x (numI 23) (numT) (list posn3D-t-class posn-t-class square-t-class))
-        (values))
-  (test/exn (set-field-typecheck empty 'x (numI 1) (numT) (list posn3D-t-class posn-t-class square-t-class))
-            "typecheck: no type: '() not field")
-  (test/exn (set-field-typecheck (list (values 'x (numT)) (values 'y (numT)))
-                                 'x (nullI) (nullT) (list posn3D-t-class posn-t-class square-t-class))
-            "typecheck: no type: (nullI) not type")
-  (test (set-field-typecheck (list (values 'x (numT)) (values 'y (numT)))
-                             'y (numI 23) (numT) (list posn3D-t-class posn-t-class square-t-class))
-        (values))
-  ;;-----------------------------------------------------------------------
+  ;;--------------------------------------------------------------------
    ; least-upper-bound test-----------------------------------------------------------------------------
   (test (least-upper-bound (objT 'Posn) (objT 'Posn3D)(list posn3D-t-class posn-t-class square-t-class))
         (objT 'Posn))
@@ -480,7 +447,9 @@
   (test/exn (typecheck-posn (setI (numI 0) 'x (numI 27)))
             "typecheck: no type: (numI 0) not object")
   (test (typecheck-posn (setI new-posn27 'x (numI 3)))
-        (objT 'Posn))
+        (numT))
+  (test/exn (typecheck-posn (setI new-posn27 'x new-posn27))
+            "field type mismatch")
         
   ;;-----------------------------------------------------------------------------------
   ;; nullI tests
