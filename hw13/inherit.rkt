@@ -17,6 +17,14 @@
          [type : Type]
          [rhs : ExpI]
          [body : ExpI])
+  (newArrayI [type : Type]
+             [size : ExpI]
+             [init : ExpI])
+  ;;(arrayRefI [arr : ExpI]
+  ;;           [index : ExpI])
+  ;;(arraySetI [arr : ExpI]
+  ;;           [index : ExpI]
+   ;;          [value : ExpI])
   (thisI)
   (newI [class-name : Symbol]
         [args : (Listof ExpI)])
@@ -60,6 +68,9 @@
       [(numI n) (numE n)]
       [(plusI l r) (plusE (recur l) (recur r))]
       [(multI l r) (multE (recur l) (recur r))]
+      ; newArrayI
+      [(newArrayI type size init)
+       (newArrayE (recur size) (recur init))]
       ; letEI
       [(letEI name type rhs body) (letE name (recur rhs) (recur body))]
       [(idEI name) (idE name)]

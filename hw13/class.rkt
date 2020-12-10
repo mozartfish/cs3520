@@ -6,6 +6,8 @@
   (letE [name : Symbol]
         [rhs : Exp]
         [body : Exp])
+  (newArrayE [size : Exp]
+             [init : Exp])
   (plusE [lhs : Exp]
          [rhs : Exp])
   (multE [lhs : Exp]
@@ -44,6 +46,9 @@
   (numV [n : Number])
   (objV [class-name : Symbol]
         [field-values : (Listof (Boxof Value))])
+  (arrV [size : Number]
+        [init-val : Value]
+        [vec : (Vectorof Value)])
   (nullV))
 
 ; implementation for let
@@ -90,6 +95,13 @@
         [(numE n) (numV n)]
         [(plusE l r) (num+ (recur l) (recur r))]
         [(multE l r) (num* (recur l) (recur r))]
+        ; newArray case
+        [(newArrayE size init)
+         (type-case Value (recur size)
+           [(numV n)
+            (local  [(define init-val (recur init))]
+              (arrV n init-val (make-vector n init-val)))]
+           [else (error 'interp "size not a number")])]
         ; idE
         [(idE s) (lookup s env)]
         ;;(let ([x : num 5]) (+ 5 x))
@@ -313,6 +325,16 @@
   (test/exn (interp-posn (getE (nullE) 'x))
             "not an object"))
 ;;----------------------------------------------
+;; newArrayE test cases
+(module+ test
+  (test (interp (newArrayE (numE 5) (numE 0))
+                empty (objV 'Object empty) (numV 0) mt-env)
+        (arrV 5 (numV 0) (make-vector 5 (numV 0))))
+    (test/exn (interp (newArrayE (nullE) (numE 0))
+                empty (objV 'Object empty) (numV 0) mt-env)
+              "interp: size not a number"))
+  
+;; -----------------------------------------------
 
 ;; letE test cases-----------------------------------------
 (module+ test
